@@ -1,0 +1,828 @@
+<title>Comeback Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #EDEFEA;
+    --surface: #FFFFFF;
+    --surface-2: #F6F7F3;
+    --ink: #15171B;
+    --muted: #5C6268;
+    --line: #D6D9D2;
+    --accent: #1F4FD1;
+    --accent-ink: #FFFFFF;
+    --red: #D2332B;
+    --blue: #1F4FD1;
+    --yellow: #D9A406;
+    --green: #178449;
+    --grey: #858B91;
+    --late: #C4281F;
+    --shadow: 0 1px 2px rgba(20, 24, 30, .06), 0 4px 14px rgba(20, 24, 30, .05);
+    --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+    --body: "Barlow", "Helvetica Neue", Arial, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #101215; --surface: #191C20; --surface-2: #1F2328; --ink: #ECEEF0; --muted: #9BA2A9;
+      --line: #2B3036; --accent: #5E8BFF; --accent-ink: #0B1020; --red: #F0625A; --blue: #5E8BFF;
+      --yellow: #F2C53D; --green: #45C27D; --grey: #7D848B; --late: #FF7A70;
+      --shadow: 0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #101215; --surface: #191C20; --surface-2: #1F2328; --ink: #ECEEF0; --muted: #9BA2A9;
+    --line: #2B3036; --accent: #5E8BFF; --accent-ink: #0B1020; --red: #F0625A; --blue: #5E8BFF;
+    --yellow: #F2C53D; --green: #45C27D; --grey: #7D848B; --late: #FF7A70;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.45 var(--body); -webkit-text-size-adjust: 100%; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 0 96px; }
+  .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px 10px; }
+  .brand { font: 700 28px/1 var(--display); letter-spacing: .01em; text-transform: uppercase; margin: 0; }
+  .brand small { display: block; font: 500 13px/1.2 var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); margin-top: 3px; }
+
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface);
+    border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, 1fr);
+    padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .tab { background: none; border: 0; padding: 12px 4px 13px; font: 700 15px/1 var(--display); letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); cursor: pointer; position: relative; }
+  .tab.on { color: var(--ink); }
+  .tab.on::before { content: ""; position: absolute; top: -1px; left: 22%; right: 22%; height: 3px; background: var(--accent); border-radius: 0 0 3px 3px; }
+  .badge { display: inline-block; min-width: 18px; padding: 2px 5px; margin-left: 4px; border-radius: 9px; background: var(--red);
+    color: #fff; font: 700 11px/14px var(--body); letter-spacing: 0; vertical-align: 1px; }
+
+  h2.sec { font: 700 15px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    margin: 26px 0 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  h2.sec .n { font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 6px; }
+  @media (min-width: 520px) { .stats { grid-template-columns: repeat(4, 1fr); } }
+  .stat { background: var(--surface); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow);
+    border: 0; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+  .stat b { font: 700 34px/1 var(--display); font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .stat.hot b { color: var(--late); }
+
+  .list { background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; background: none; border: 0;
+    border-top: 1px solid var(--line); text-align: left; cursor: pointer; }
+  .row:first-child { border-top: 0; }
+  .row:active { background: var(--surface-2); }
+  .row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-sub { font-size: 13.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .due { font-size: 13px; font-weight: 600; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .due.late { color: var(--late); }
+  .due.today { color: var(--accent); }
+  .ex { font: 600 10.5px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; vertical-align: 2px; margin-left: 4px; }
+
+  /* A bumper plate: colored ring with a center hole */
+  .plate { --c: var(--grey); width: 16px; height: 16px; border-radius: 50%; flex: none;
+    background: radial-gradient(circle, var(--surface) 0 2.6px, var(--c) 3.2px); }
+
+  .empty { background: var(--surface); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); }
+  .empty p { margin: 0 0 12px; }
+  .note { background: var(--surface-2); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px;
+    font-size: 14px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 12px; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 10px 16px;
+    border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; font-size: 15px;
+    cursor: pointer; text-decoration: none; color: var(--ink); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.small { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+  .btn.danger { color: var(--late); border-color: transparent; background: none; }
+  .btn.danger.armed { background: var(--late); color: #fff; }
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-row .btn { flex: 1 1 140px; }
+
+  .search { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--surface); font-size: 14px; font-weight: 500; cursor: pointer; font-variant-numeric: tabular-nums; }
+  .chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .chip.on .plate { background: radial-gradient(circle, var(--ink) 0 2.6px, var(--c) 3.2px); }
+  .chip .plate { width: 13px; height: 13px; }
+  .sortrow { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 8px; font-size: 14px; color: var(--muted); gap: 8px; }
+  .sortrow select { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 8px; font-size: 14px; }
+
+  /* Person sheet */
+  .sheet { position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; overscroll-behavior: contain;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); animation: up .18s ease-out; }
+  @keyframes up { from { transform: translateY(16px); opacity: .6; } }
+  @media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+  .sh-inner { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 0 40px; }
+  .sh-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); display: flex; justify-content: space-between; align-items: center; padding-block: 10px; }
+  .sh-name { font: 700 34px/1.05 var(--display); text-transform: uppercase; letter-spacing: .01em; margin: 4px 0 4px; text-wrap: balance; }
+  .sh-meta { color: var(--muted); font-size: 15px; }
+  .stages { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .card { background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); padding: 14px; margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .card h3 { font: 700 14px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .phone { font: 600 22px/1.2 var(--body); font-variant-numeric: tabular-nums; user-select: text; -webkit-user-select: text; }
+  .phone-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .phone-row .phone { flex: 1 1 100%; }
+  textarea, input[type=text], input[type=tel], input[type=email], input[type=date], select.field {
+    width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); font-size: 16px; }
+  textarea { resize: vertical; line-height: 1.4; }
+  .lbl { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .log-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .log-btns .btn:first-child { grid-column: 1 / -1; }
+  .hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; }
+  .hist .hd { display: inline-block; min-width: 64px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  dl.info { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 15px; }
+  dl.info dt { color: var(--muted); }
+  dl.info dd { margin: 0; overflow-wrap: anywhere; }
+  .form { display: flex; flex-direction: column; gap: 12px; }
+  .form label { display: flex; flex-direction: column; gap: 4px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 380px) { .two { grid-template-columns: 1fr; } }
+
+  .tpl { background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); padding: 14px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .tpl-top { display: flex; gap: 8px; }
+  .tpl-top input { flex: 1; font-weight: 600; }
+  .tpl-top select { width: auto; flex: none; }
+
+  .progress { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .progress i { display: block; height: 100%; background: var(--green); transition: width .2s; }
+  .map { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; font-size: 14.5px; }
+  .map select { padding: 7px 8px; font-size: 15px; }
+  .preview { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .preview table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
+  .preview th, .preview td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  .preview th { color: var(--muted); font-weight: 600; }
+
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 40;
+    background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14.5px; font-weight: 500;
+    max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1 class="brand">Comeback Board<small id="subtitle">Loading your people…</small></h1>
+    <button class="btn small primary" data-act="tab" data-v="add">+ Add</button>
+  </header>
+  <main id="view"></main>
+</div>
+
+<nav class="tabs" aria-label="Sections">
+  <button class="tab" data-act="tab" data-v="today">Today<span id="dueBadge"></span></button>
+  <button class="tab" data-act="tab" data-v="people">People</button>
+  <button class="tab" data-act="tab" data-v="msgs">Texts</button>
+  <button class="tab" data-act="tab" data-v="add">Add</button>
+</nav>
+
+<div id="sheet" class="sheet" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script>
+/* ---------- small helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => ymd(new Date());
+const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
+const isYmd = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+const parseYmd = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const diffDays = (a, b) => Math.round((parseYmd(a) - parseYmd(b)) / 864e5);
+const firstName = n => (String(n || '').trim().split(/\s+/)[0]) || 'there';
+const dialable = p => String(p || '').replace(/[^\d+]/g, '');
+const phoneKey = p => String(p || '').replace(/\D/g, '').slice(-10);
+
+function fmtPhone(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  const t = d.length === 11 && d[0] === '1' ? d.slice(1) : d;
+  return t.length === 10 ? `(${t.slice(0, 3)}) ${t.slice(3, 6)}-${t.slice(6)}` : String(p || '');
+}
+function fmtDay(s) {
+  if (!isYmd(s)) return s || '';
+  const d = parseYmd(s);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
+}
+function fmtMonth(s) {
+  if (!isYmd(s)) return s || '';
+  return parseYmd(s).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+function dueLabel(next) {
+  const d = diffDays(next, today());
+  if (d < 0) return `${-d}d overdue`;
+  if (d === 0) return 'Today';
+  if (d === 1) return 'Tomorrow';
+  if (d < 7) return parseYmd(next).toLocaleDateString(undefined, { weekday: 'short' });
+  return fmtDay(next);
+}
+function ago(s) {
+  if (!isYmd(s)) return '';
+  const n = diffDays(today(), s);
+  if (n <= 0) return 'today';
+  if (n === 1) return 'yesterday';
+  if (n < 45) return `${n}d ago`;
+  return `${Math.round(n / 30)}mo ago`;
+}
+function normDate(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const t = Date.parse(s);
+  return isNaN(t) ? s : ymd(new Date(t));
+}
+
+/* ---------- constants ---------- */
+const STAGES = [
+  { id: 'todo', label: 'To contact', color: 'var(--red)' },
+  { id: 'texted', label: 'Texted', color: 'var(--blue)' },
+  { id: 'talking', label: 'Talking', color: 'var(--yellow)' },
+  { id: 'won', label: 'Won back', lead: 'Joined', color: 'var(--green)' },
+  { id: 'notnow', label: 'Not now', color: 'var(--grey)' },
+];
+const stageOf = p => STAGES.find(s => s.id === p.stage) || STAGES[0];
+const stageLabel = (s, p) => (p && p.type === 'lead' && s.lead) ? s.lead : s.label;
+const NEXT_OPTS = [
+  { v: 1, l: 'Tomorrow' }, { v: 3, l: '3 days' }, { v: 7, l: '1 week' },
+  { v: 14, l: '2 weeks' }, { v: 30, l: '1 month' }, { v: -1, l: 'No follow-up' },
+];
+const DEF_TPL = [
+  { id: 'miss', title: 'We miss you', lead: false,
+    body: "Hey {first}! It's been a while since we've seen you at {gym}. We'd love to have you back. Want me to save you a spot in a class this week?" },
+  { id: 'free', title: 'Free week back', lead: false,
+    body: "Hi {first}, it's {gym}! We're giving past members a free week to come back and try things out, no strings attached. Want me to set it up for you?" },
+  { id: 'check', title: 'Follow-up nudge', lead: false,
+    body: "Hey {first}, just checking back in! Any chance you'd want to come in for a workout this week? Happy to work around your schedule." },
+  { id: 'lead', title: 'New lead welcome', lead: true,
+    body: "Hi {first}! Thanks for your interest in {gym}. When's a good day for you to come in for a free trial class?" },
+];
+
+/* ---------- state ---------- */
+const S = {
+  people: [], loaded: false, noDb: false, templates: null, gym: '',
+  tab: 'today', q: '', type: 'all', stage: 'all', sort: 'next',
+  openId: null, editing: false, nextPick: 3, tplId: null, msgDraft: null, delArm: false, sheetStale: false,
+  imp: null, clearArm: false,
+};
+let DB = null;
+const tpls = () => (S.templates && S.templates.length ? S.templates : DEF_TPL);
+const gymName = () => S.gym || 'the gym';
+const fillTpl = (body, p) => String(body || '').replaceAll('{first}', firstName(p.name)).replaceAll('{gym}', gymName());
+
+/* ---------- writes (one at a time per document) ---------- */
+const queues = {};
+function errText(e) {
+  const c = e && e.code;
+  if (c === 'quota_exceeded') return 'Storage is full. Delete some people you no longer need, then try again.';
+  if (c === 'invalid_argument') return "That change wasn't allowed. You may be viewing someone else's copy.";
+  if (c === 'resource_exhausted') return 'Saving too fast. Wait a few seconds and try again.';
+  return "Couldn't save. Check your connection and try again.";
+}
+function write(path, fn) {
+  const q = (queues[path] || Promise.resolve()).then(fn).catch(e => { toast(errText(e)); });
+  queues[path] = q;
+  return q;
+}
+const upd = (id, patch) => {
+  const p = S.people.find(x => x.id === id);
+  if (p) Object.assign(p, patch); // show it right away
+  return write('people/' + id, () => DB.doc('people/' + id).update(patch));
+};
+const withLog = (p, text) => ({ log: [...(p.log || []), { d: today(), t: text }].slice(-100) });
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2800);
+}
+async function copy(text, done) {
+  try { await navigator.clipboard.writeText(text); toast(done); }
+  catch { toast('Copy blocked here. Press and hold the text to copy it.'); }
+}
+
+/* ---------- derived lists ---------- */
+function buckets() {
+  const t = today(), wk = addDays(7);
+  const withNext = S.people.filter(p => isYmd(p.next));
+  const byNext = (a, b) => a.next.localeCompare(b.next) || String(a.name).localeCompare(String(b.name));
+  return {
+    late: withNext.filter(p => p.next < t).sort(byNext),
+    now: withNext.filter(p => p.next === t).sort(byNext),
+    soon: withNext.filter(p => p.next > t && p.next <= wk).sort(byNext),
+    fresh: S.people.filter(p => (p.stage || 'todo') === 'todo' && !p.last && !isYmd(p.next)).sort(byRecentLeft),
+  };
+}
+function byRecentLeft(a, b) {
+  const la = isYmd(a.left) ? a.left : '', lb = isYmd(b.left) ? b.left : '';
+  return lb.localeCompare(la) || String(a.name).localeCompare(String(b.name));
+}
+
+/* ---------- rendering ---------- */
+function row(p) {
+  const st = stageOf(p);
+  const t = today();
+  const due = isYmd(p.next) ? dueLabel(p.next) : '';
+  const cls = !due ? '' : p.next < t ? 'late' : p.next === t ? 'today' : '';
+  const where = p.type === 'lead' ? 'New lead' : (p.left ? 'Left ' + fmtMonth(p.left) : 'Former member');
+  const sub = [stageLabel(st, p), where, p.last ? 'contacted ' + ago(p.last) : 'never contacted'].join(' · ');
+  return `<button class="row" data-act="open" data-id="${esc(p.id)}">
+    <span class="plate" style="--c:${st.color}" aria-hidden="true"></span>
+    <span class="row-main"><span class="row-name">${esc(p.name || 'No name')}${p.example ? '<span class="ex">Example</span>' : ''}</span>
+    <span class="row-sub">${esc(sub)}</span></span>
+    ${due ? `<span class="due ${cls}">${esc(due)}</span>` : ''}
+  </button>`;
+}
+const listOf = arr => `<div class="list">${arr.map(row).join('')}</div>`;
+
+function examplesNote() {
+  const n = S.people.filter(p => p.example).length;
+  if (!n) return '';
+  return `<div class="note"><span>${n} example ${n === 1 ? 'person is' : 'people are'} here so you can see how it works.</span>
+    <button class="btn small ${S.clearArm ? 'danger armed' : ''}" data-act="clearEx">${S.clearArm ? 'Tap again to remove' : 'Remove examples'}</button></div>`;
+}
+
+function viewToday() {
+  if (!S.loaded) return '<p class="muted">Loading…</p>';
+  if (S.noDb) return `<div class="empty"><p><b>Open this page on claude.ai to use it.</b></p><p class="muted">Your people are saved to your claude.ai account, so this copy can't reach them.</p></div>`;
+  if (!S.people.length) return `<div class="empty"><p><b>No one here yet.</b></p><p class="muted">Import the spreadsheet from your gym software, or add someone by hand.</p><button class="btn primary" data-act="tab" data-v="add">Add people</button></div>`;
+  const b = buckets();
+  const m = today().slice(0, 7);
+  const won = S.people.filter(p => p.stage === 'won' && String(p.wonDate || '').startsWith(m)).length;
+  const talking = S.people.filter(p => p.stage === 'talking').length;
+  const dueN = b.late.length + b.now.length;
+  let h = `<div class="stats">
+    <button class="stat ${dueN ? 'hot' : ''}" data-act="jump" data-v="due"><b>${dueN}</b><span>Due today</span></button>
+    <button class="stat" data-act="filter" data-v="todo"><b>${S.people.filter(p => (p.stage || 'todo') === 'todo').length}</b><span><i class="plate" style="--c:var(--red)"></i>To contact</span></button>
+    <button class="stat" data-act="filter" data-v="talking"><b>${talking}</b><span><i class="plate" style="--c:var(--yellow)"></i>Talking</span></button>
+    <button class="stat" data-act="filter" data-v="won"><b>${won}</b><span><i class="plate" style="--c:var(--green)"></i>Won back this month</span></button>
+  </div>${examplesNote()}`;
+  if (b.late.length) h += `<h2 class="sec" id="due">Overdue <span class="n">${b.late.length}</span></h2>${listOf(b.late)}`;
+  if (b.now.length) h += `<h2 class="sec" ${b.late.length ? '' : 'id="due"'}>Due today <span class="n">${b.now.length}</span></h2>${listOf(b.now)}`;
+  if (!dueN) h += `<h2 class="sec" id="due">Due today</h2><div class="empty"><p>You're caught up. Nobody is due today.</p>${b.fresh.length ? '<p class="muted">Good time to text a few people you haven\'t reached yet ↓</p>' : ''}</div>`;
+  if (b.fresh.length) h += `<h2 class="sec">Not contacted yet <span class="n">${b.fresh.length}</span></h2>
+    <p class="muted" style="margin:-4px 0 10px;font-size:14px">Most recently left first. They're the easiest to win back.</p>${listOf(b.fresh.slice(0, 5))}
+    ${b.fresh.length > 5 ? `<div style="margin-top:10px"><button class="btn small" data-act="filter" data-v="todo">See all ${b.fresh.length}</button></div>` : ''}`;
+  if (b.soon.length) h += `<h2 class="sec">Next 7 days <span class="n">${b.soon.length}</span></h2>${listOf(b.soon)}`;
+  return h;
+}
+
+function peopleShell() {
+  return `<input class="search" id="q" type="search" placeholder="Search name, phone or note" value="${esc(S.q)}" autocomplete="off">
+    <div id="pfilters"></div><div id="plist"></div>`;
+}
+function fillPeople() {
+  const types = [['all', 'Everyone'], ['former', 'Former members'], ['lead', 'New leads']];
+  const inType = S.people.filter(p => S.type === 'all' || (p.type || 'former') === S.type);
+  const count = id => inType.filter(p => (p.stage || 'todo') === id).length;
+  $('#pfilters').innerHTML = `<div class="chips">${types.map(([v, l]) => `<button class="chip ${S.type === v ? 'on' : ''}" data-act="ptype" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="chips"><button class="chip ${S.stage === 'all' ? 'on' : ''}" data-act="pstage" data-v="all">All ${inType.length}</button>
+    ${STAGES.map(s => `<button class="chip ${S.stage === s.id ? 'on' : ''}" data-act="pstage" data-v="${s.id}"><span class="plate" style="--c:${s.color}"></span>${s.label} ${count(s.id)}</button>`).join('')}</div>`;
+  fillPeopleList(inType);
+}
+function fillPeopleList(inType) {
+  inType = inType || S.people.filter(p => S.type === 'all' || (p.type || 'former') === S.type);
+  const q = S.q.trim().toLowerCase(), qd = q.replace(/\D/g, '');
+  let arr = inType.filter(p => S.stage === 'all' || (p.stage || 'todo') === S.stage);
+  if (q) arr = arr.filter(p => String(p.name || '').toLowerCase().includes(q) || String(p.notes || '').toLowerCase().includes(q)
+    || String(p.email || '').toLowerCase().includes(q) || (qd.length >= 3 && String(p.phone || '').replace(/\D/g, '').includes(qd)));
+  const sorts = {
+    next: (a, b) => (isYmd(a.next) ? a.next : '9') .localeCompare(isYmd(b.next) ? b.next : '9') || byRecentLeft(a, b),
+    left: byRecentLeft,
+    name: (a, b) => String(a.name).localeCompare(String(b.name)),
+    last: (a, b) => String(a.last || '').localeCompare(String(b.last || '')),
+  };
+  arr.sort(sorts[S.sort] || sorts.next);
+  const shown = arr.slice(0, 200);
+  $('#plist').innerHTML = `<div class="sortrow"><span>${arr.length} ${arr.length === 1 ? 'person' : 'people'}</span>
+    <label>Sort <select id="sort">
+      <option value="next" ${S.sort === 'next' ? 'selected' : ''}>Next follow-up</option>
+      <option value="left" ${S.sort === 'left' ? 'selected' : ''}>Most recently left</option>
+      <option value="last" ${S.sort === 'last' ? 'selected' : ''}>Longest since contact</option>
+      <option value="name" ${S.sort === 'name' ? 'selected' : ''}>Name</option>
+    </select></label></div>
+    ${arr.length ? listOf(shown) : '<div class="empty"><p class="muted" style="margin:0">Nobody matches.</p></div>'}
+    ${arr.length > shown.length ? `<p class="muted" style="font-size:14px">Showing the first 200. Search to narrow it down.</p>` : ''}`;
+}
+
+function viewMsgs() {
+  const t = tpls();
+  return `<p class="muted" style="margin-top:4px">These fill in automatically when you text someone. <b>{first}</b> becomes their first name and <b>{gym}</b> becomes your gym's name.</p>
+  <div class="tpl"><label class="form"><span class="lbl">Your gym's name</span><input type="text" id="gym" value="${esc(S.gym)}" placeholder="e.g. Iron Works Fitness"></label></div>
+  <div id="tpls">${t.map(tplCard).join('')}</div>
+  <div class="btn-row"><button class="btn" data-act="addTpl">+ New message</button><button class="btn primary" data-act="saveTpls">Save messages</button></div>`;
+}
+function tplCard(x) {
+  return `<div class="tpl" data-tid="${esc(x.id)}">
+    <div class="tpl-top"><input type="text" class="t-title" value="${esc(x.title)}" aria-label="Message name">
+      <select class="field t-for" aria-label="Who it's for"><option value="former" ${x.lead ? '' : 'selected'}>Former</option><option value="lead" ${x.lead ? 'selected' : ''}>New lead</option></select></div>
+    <textarea class="t-body" rows="4" aria-label="Message text">${esc(x.body)}</textarea>
+    <div><button class="btn small danger" data-act="delTpl">Remove</button></div></div>`;
+}
+
+function viewAdd() {
+  return `<h2 class="sec" style="margin-top:8px">Add someone</h2>
+  <form class="card form" id="addForm" autocomplete="off">
+    <label><span class="lbl">Name</span><input type="text" id="a-name" required></label>
+    <div class="two"><label><span class="lbl">Phone</span><input type="tel" id="a-phone"></label>
+    <label><span class="lbl">Type</span><select class="field" id="a-type"><option value="lead">New lead</option><option value="former">Former member</option></select></label></div>
+    <label><span class="lbl">Email (optional)</span><input type="email" id="a-email"></label>
+    <label><span class="lbl">Note (optional)</span><input type="text" id="a-note" placeholder="Where you met them, what they're after…"></label>
+    <label><span class="lbl">First follow-up</span><select class="field" id="a-next">
+      <option value="0">Today</option><option value="1">Tomorrow</option><option value="3">In 3 days</option><option value="7">In a week</option><option value="-1">None</option></select></label>
+    <button class="btn primary" type="submit">Add person</button>
+  </form>
+  <h2 class="sec">Import your spreadsheet</h2>
+  <div class="card" id="imp"></div>`;
+}
+function fillImport() {
+  const el = $('#imp'); if (!el) return;
+  const I = S.imp;
+  if (!I) {
+    el.innerHTML = `<p style="margin:0">Export your member list from your gym software (Excel or CSV both work) and pick the file here. You'll check the columns before anything is added.</p>
+      <label class="btn primary" style="position:relative">Choose spreadsheet<input type="file" id="file" accept=".csv,.xlsx,.xls,.txt" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label>
+      <p class="muted" style="margin:0;font-size:14px">People already on your board (same phone or email) are skipped, so importing the same file twice is safe.</p>`;
+    return;
+  }
+  if (I.error) { el.innerHTML = `<p style="margin:0">${esc(I.error)}</p><button class="btn" data-act="impCancel">Try another file</button>`; return; }
+  if (I.running || I.finished) {
+    const pct = I.total ? Math.round(I.done / I.total * 100) : 100;
+    el.innerHTML = `<p style="margin:0"><b>${I.finished ? `Added ${I.done} ${I.done === 1 ? 'person' : 'people'}.` : `Adding ${I.done} of ${I.total}…`}</b>${I.failed ? ` ${I.failed} couldn't be saved.` : ''}</p>
+      <div class="progress"><i style="width:${pct}%"></i></div>
+      ${I.finished ? `<div class="btn-row"><button class="btn primary" data-act="tab" data-v="today">Go to Today</button><button class="btn" data-act="impCancel">Import another</button></div>` : '<p class="muted" style="margin:0;font-size:14px">Keep this page open until it finishes.</p>'}`;
+    return;
+  }
+  const plan = planImport();
+  const opts = sel => `<option value="-1">(none)</option>` + I.headers.map((h, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${esc(h || 'Column ' + (i + 1))}</option>`).join('');
+  const FIELDS = [['name', 'Full name'], ['first', 'First name'], ['last', 'Last name'], ['phone', 'Phone'], ['email', 'Email'], ['left', 'Date they left'], ['reason', 'Why they left'], ['notes', 'Notes']];
+  el.innerHTML = `<p style="margin:0"><b>${esc(I.fileName)}</b>: ${I.rows.length} rows. Check that each column is matched correctly.</p>
+    <div class="map">${FIELDS.map(([k, l]) => `<span>${l}</span><select class="field" data-map="${k}">${opts(I.map[k])}</select>`).join('')}
+      <span>These people are</span><select class="field" id="impType"><option value="former" ${I.type === 'former' ? 'selected' : ''}>Former members</option><option value="lead" ${I.type === 'lead' ? 'selected' : ''}>New leads</option></select></div>
+    <div class="preview"><table><thead><tr><th>Name</th><th>Phone</th><th>Left</th><th>Reason</th></tr></thead><tbody>
+      ${plan.add.slice(0, 5).map(p => `<tr><td>${esc(p.name)}</td><td>${esc(fmtPhone(p.phone))}</td><td>${esc(fmtMonth(p.left))}</td><td>${esc(p.reason)}</td></tr>`).join('') || '<tr><td colspan="4">No rows with a name or phone yet. Check the matches above.</td></tr>'}
+    </tbody></table></div>
+    <p class="muted" style="margin:0;font-size:14px">${plan.add.length} to add${plan.dupes ? ` · ${plan.dupes} already on your board or repeated` : ''}${plan.skipped ? ` · ${plan.skipped} blank rows skipped` : ''}${plan.noPhone ? ` · ${plan.noPhone} have no phone number` : ''}</p>
+    <div class="btn-row"><button class="btn" data-act="impCancel">Cancel</button><button class="btn primary" data-act="impGo" ${plan.add.length ? '' : 'disabled'}>Add ${plan.add.length} people</button></div>`;
+}
+
+function render() {
+  const n = S.people.length;
+  $('#subtitle').textContent = !S.loaded ? 'Loading your people…' : S.noDb ? 'Not connected' : `${n} ${n === 1 ? 'person' : 'people'} on your board`;
+  const b = S.loaded ? buckets() : { late: [], now: [] };
+  const dueN = b.late.length + b.now.length;
+  $('#dueBadge').innerHTML = dueN ? `<span class="badge">${dueN}</span>` : '';
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.v === S.tab));
+
+  const view = $('#view');
+  const focusedInView = view.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if (view.dataset.tab !== S.tab) {
+    view.dataset.tab = S.tab;
+    view.innerHTML = S.tab === 'people' ? peopleShell() : S.tab === 'msgs' ? viewMsgs() : S.tab === 'add' ? viewAdd() : '';
+  }
+  if (S.tab === 'today') view.innerHTML = viewToday();
+  else if (S.tab === 'people') fillPeople();
+  else if (S.tab === 'add') { if (!(focusedInView && $('#imp')?.contains(document.activeElement))) fillImport(); }
+  renderSheet(false);
+}
+
+function renderSheet(force) {
+  const el = $('#sheet');
+  const p = S.people.find(x => x.id === S.openId);
+  if (!S.openId || !p) { el.hidden = true; el.innerHTML = ''; document.body.style.overflow = ''; return; }
+  const busy = el.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if (!force && (busy || S.editing) && !el.hidden) { S.sheetStale = true; return; }
+  S.sheetStale = false;
+  const top = el.scrollTop;
+  el.innerHTML = `<div class="sh-inner">${S.editing ? editHTML(p) : sheetHTML(p)}</div>`;
+  el.hidden = false; el.scrollTop = top;
+  document.body.style.overflow = 'hidden';
+}
+
+function sheetHTML(p) {
+  const st = stageOf(p);
+  const t = tpls();
+  const tp = t.find(x => x.id === S.tplId) || (p.last ? t.find(x => x.id === 'check') : null) || t.find(x => !!x.lead === (p.type === 'lead')) || t[0];
+  const msg = S.msgDraft ?? fillTpl(tp && tp.body, p);
+  const ph = dialable(p.phone);
+  const where = p.type === 'lead' ? 'New lead' : 'Former member';
+  const meta = [where, p.left ? 'left ' + fmtMonth(p.left) : '', p.reason ? '“' + p.reason + '”' : ''].filter(Boolean).join(' · ');
+  const hist = (p.log || []).slice().reverse();
+  return `<div class="sh-bar"><button class="btn small" data-act="close">← Back</button><button class="btn small" data-act="edit">Edit</button></div>
+  <h2 class="sh-name">${esc(p.name || 'No name')}</h2>
+  <div class="sh-meta">${esc(meta)}${p.example ? ' <span class="ex">Example</span>' : ''}</div>
+  <div class="stages" role="group" aria-label="Stage">${STAGES.map(s => `<button class="chip ${s.id === st.id ? 'on' : ''}" data-act="stage" data-v="${s.id}"><span class="plate" style="--c:${s.color}"></span>${stageLabel(s, p)}</button>`).join('')}</div>
+
+  <section class="card">
+    <div class="phone-row"><span class="phone">${ph ? esc(fmtPhone(p.phone)) : '<span class="muted" style="font-size:16px">No phone number. Tap Edit to add one.</span>'}</span>
+    ${ph ? `<a class="btn small" href="tel:${esc(ph)}">Call</a><button class="btn small" data-act="copyPhone">Copy number</button>` : ''}</div>
+    <div class="lbl">Next follow-up: <b style="color:var(--ink)">${isYmd(p.next) ? esc(dueLabel(p.next)) + (diffDays(p.next, today()) > 1 ? ' (' + esc(fmtDay(p.next)) + ')' : '') : 'none set'}</b> · last contact: <b style="color:var(--ink)">${p.last ? esc(ago(p.last)) : 'never'}</b></div>
+  </section>
+
+  <section class="card">
+    <h3>Text them</h3>
+    <div class="chips" style="margin:0">${t.map(x => `<button class="chip ${tp && x.id === tp.id ? 'on' : ''}" data-act="tpl" data-v="${esc(x.id)}">${esc(x.title)}</button>`).join('')}</div>
+    <textarea id="msg" rows="5" aria-label="Message">${esc(msg)}</textarea>
+    <div class="btn-row">${ph ? `<a class="btn primary" id="smsLink" href="sms:${esc(ph)}?&body=${encodeURIComponent(msg)}">Open in Messages</a>` : ''}<button class="btn" data-act="copyMsg">Copy message</button></div>
+  </section>
+
+  <section class="card">
+    <h3>After you reach out, log it</h3>
+    <div class="lbl">Remind me again</div>
+    <div class="chips" style="margin:0">${NEXT_OPTS.map(o => `<button class="chip ${S.nextPick === o.v ? 'on' : ''}" data-act="pickNext" data-v="${o.v}">${o.l}</button>`).join('')}</div>
+    <div class="log-btns">
+      <button class="btn primary" data-act="log" data-v="texted">I texted them</button>
+      <button class="btn" data-act="log" data-v="called">I called them</button>
+      <button class="btn" data-act="log" data-v="noanswer">No answer</button>
+      <button class="btn" data-act="log" data-v="replied">They replied</button>
+    </div>
+    <label class="lbl" for="nextDate">Or pick an exact follow-up date</label>
+    <input type="date" id="nextDate" value="${isYmd(p.next) ? p.next : ''}">
+  </section>
+
+  <section class="card"><h3>Notes</h3>
+    <textarea id="notes" rows="3" placeholder="Anything to remember: schedule, injury, kids' names, what offer they liked…">${esc(p.notes || '')}</textarea></section>
+
+  <section class="card"><h3>History</h3>
+    <ol class="hist">${hist.length ? hist.map(l => `<li><span class="hd">${esc(fmtDay(l.d))}</span>${esc(l.t)}</li>`).join('') : '<li class="muted">Nothing yet</li>'}</ol></section>
+
+  <section class="card"><h3>Details</h3><dl class="info">
+    <dt>Phone</dt><dd>${esc(fmtPhone(p.phone)) || '—'}</dd>
+    <dt>Email</dt><dd>${esc(p.email) || '—'}</dd>
+    ${p.type === 'lead' ? '' : `<dt>Left</dt><dd>${esc(fmtDay(p.left)) || '—'}</dd><dt>Reason</dt><dd>${esc(p.reason) || '—'}</dd>`}
+    <dt>Added</dt><dd>${p.created ? esc(fmtDay(ymd(new Date(p.created)))) : '—'}</dd></dl></section>
+  <div style="margin-top:16px"><button class="btn danger ${S.delArm ? 'armed' : ''}" data-act="del">${S.delArm ? 'Tap again to delete for good' : 'Delete this person'}</button></div>`;
+}
+
+function editHTML(p) {
+  return `<div class="sh-bar"><button class="btn small" data-act="cancelEdit">Cancel</button><button class="btn small primary" data-act="saveEdit">Save</button></div>
+  <h2 class="sh-name">Edit</h2>
+  <div class="card form">
+    <label><span class="lbl">Name</span><input type="text" id="e-name" value="${esc(p.name)}"></label>
+    <div class="two"><label><span class="lbl">Phone</span><input type="tel" id="e-phone" value="${esc(p.phone)}"></label>
+    <label><span class="lbl">Type</span><select class="field" id="e-type"><option value="former" ${p.type !== 'lead' ? 'selected' : ''}>Former member</option><option value="lead" ${p.type === 'lead' ? 'selected' : ''}>New lead</option></select></label></div>
+    <label><span class="lbl">Email</span><input type="email" id="e-email" value="${esc(p.email)}"></label>
+    <div class="two"><label><span class="lbl">Date they left</span><input type="date" id="e-left" value="${isYmd(p.left) ? p.left : ''}"></label>
+    <label><span class="lbl">Why they left</span><input type="text" id="e-reason" value="${esc(p.reason)}"></label></div>
+  </div>`;
+}
+
+/* ---------- actions ---------- */
+const openP = () => S.people.find(x => x.id === S.openId);
+const ACT = {
+  tab(b) { S.tab = b.dataset.v; S.clearArm = false; render(); window.scrollTo(0, 0); },
+  jump() { S.tab = 'today'; render(); $('#due')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); },
+  filter(b) { S.tab = 'people'; S.stage = b.dataset.v; S.type = 'all'; S.q = ''; S.sort = b.dataset.v === 'todo' ? 'left' : 'next'; $('#view').dataset.tab = ''; render(); window.scrollTo(0, 0); },
+  ptype(b) { S.type = b.dataset.v; fillPeople(); },
+  pstage(b) { S.stage = b.dataset.v; fillPeople(); },
+  open(b) {
+    S.openId = b.dataset.id; S.editing = false; S.nextPick = 3; S.tplId = null; S.msgDraft = null; S.delArm = false;
+    $('#sheet').scrollTop = 0; renderSheet(true);
+  },
+  close() { S.openId = null; S.editing = false; renderSheet(true); render(); },
+  stage(b) {
+    const p = openP(); const s = STAGES.find(x => x.id === b.dataset.v);
+    if (!p || !s || p.stage === s.id) return;
+    const patch = { stage: s.id, ...withLog(p, 'Moved to ' + stageLabel(s, p)) };
+    if (s.id === 'won') { patch.wonDate = today(); patch.next = null; }
+    if (s.id === 'notnow') patch.next = null;
+    upd(p.id, patch); renderSheet(true); toast(s.id === 'won' ? `Nice! ${firstName(p.name)} is back 💪` : 'Moved to ' + stageLabel(s, p));
+  },
+  tpl(b) { S.tplId = b.dataset.v; S.msgDraft = null; renderSheet(true); },
+  copyMsg() { copy($('#msg').value, 'Message copied. Paste it into Messages.'); },
+  copyPhone() { const p = openP(); if (p) copy(p.phone, 'Number copied'); },
+  pickNext(b) { S.nextPick = Number(b.dataset.v); renderSheet(true); },
+  log(b) {
+    const p = openP(); if (!p) return;
+    const kind = b.dataset.v;
+    const words = { texted: 'Texted', called: 'Called', noanswer: 'Called, no answer', replied: 'They replied' }[kind];
+    const tp = tpls().find(x => x.id === S.tplId);
+    const next = S.nextPick >= 0 ? addDays(S.nextPick) : null;
+    const patch = { last: today(), next, ...withLog(p, words + (kind === 'texted' && tp ? ` (“${tp.title}”)` : '')) };
+    const stage = p.stage || 'todo';
+    if (kind === 'replied' && (stage === 'todo' || stage === 'texted')) patch.stage = 'talking';
+    else if (kind !== 'replied' && stage === 'todo') patch.stage = 'texted';
+    upd(p.id, patch); S.msgDraft = null; renderSheet(true);
+    toast(next ? `Logged. I'll remind you ${dueLabel(next) === 'Tomorrow' ? 'tomorrow' : 'on ' + fmtDay(next)}.` : 'Logged. No follow-up set.');
+  },
+  edit() { S.editing = true; renderSheet(true); },
+  cancelEdit() { S.editing = false; renderSheet(true); },
+  saveEdit() {
+    const p = openP(); if (!p) return;
+    const name = $('#e-name').value.trim();
+    if (!name) { toast('Add a name first'); return; }
+    upd(p.id, { name, phone: $('#e-phone').value.trim(), email: $('#e-email').value.trim(), type: $('#e-type').value,
+      left: $('#e-left').value || (isYmd(p.left) ? '' : (p.left || '')), reason: $('#e-reason').value.trim() });
+    S.editing = false; renderSheet(true); toast('Saved');
+  },
+  del() {
+    const p = openP(); if (!p) return;
+    if (!S.delArm) { S.delArm = true; renderSheet(true); return; }
+    write('people/' + p.id, () => DB.doc('people/' + p.id).delete());
+    S.people = S.people.filter(x => x.id !== p.id);
+    S.openId = null; S.delArm = false; renderSheet(true); render(); toast(`Deleted ${p.name}`);
+  },
+  clearEx() {
+    if (!S.clearArm) { S.clearArm = true; render(); return; }
+    const ex = S.people.filter(p => p.example);
+    ex.forEach(p => write('people/' + p.id, () => DB.doc('people/' + p.id).delete()));
+    S.people = S.people.filter(p => !p.example); S.clearArm = false; render(); toast('Examples removed');
+  },
+  addTpl() {
+    const box = $('#tpls');
+    box.insertAdjacentHTML('beforeend', tplCard({ id: 't' + Date.now().toString(36), title: 'New message', lead: false, body: 'Hey {first}! ' }));
+    box.lastElementChild.querySelector('.t-title').focus();
+  },
+  delTpl(b) { b.closest('.tpl').remove(); },
+  async saveTpls() {
+    if (!DB) return;
+    const items = [...document.querySelectorAll('#tpls .tpl')].map(el => ({
+      id: el.dataset.tid, title: el.querySelector('.t-title').value.trim() || 'Untitled',
+      lead: el.querySelector('.t-for').value === 'lead', body: el.querySelector('.t-body').value,
+    }));
+    const gym = $('#gym').value.trim();
+    S.templates = items; S.gym = gym;
+    await write('settings/main', () => DB.doc('settings/main').set({ templates: items, gym }));
+    toast('Messages saved');
+  },
+  impCancel() { S.imp = null; fillImport(); },
+  impGo() { runImport(); },
+};
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b || b.disabled) return;
+  if (b.dataset.act !== 'del' && S.delArm && b.closest('#sheet')) S.delArm = false;
+  ACT[b.dataset.act]?.(b, e);
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'q') { S.q = t.value; fillPeopleList(); }
+  if (t.id === 'msg') { S.msgDraft = t.value; const a = $('#smsLink'); const p = openP(); if (a && p) a.href = `sms:${dialable(p.phone)}?&body=${encodeURIComponent(t.value)}`; }
+});
+document.addEventListener('change', e => {
+  const t = e.target, p = openP();
+  if (t.id === 'sort') { S.sort = t.value; fillPeopleList(); }
+  if (t.id === 'notes' && p && t.value !== (p.notes || '')) { upd(p.id, { notes: t.value }); toast('Note saved'); }
+  if (t.id === 'nextDate' && p) { upd(p.id, { next: t.value || null }); toast(t.value ? 'Follow-up set for ' + fmtDay(t.value) : 'Follow-up cleared'); S.sheetStale = true; }
+  if (t.id === 'file' && t.files[0]) readFile(t.files[0]);
+  if (t.dataset.map && S.imp) { S.imp.map[t.dataset.map] = Number(t.value); fillImport(); }
+  if (t.id === 'impType' && S.imp) { S.imp.type = t.value; }
+});
+document.addEventListener('focusout', () => {
+  // catch up on changes that arrived while a field had focus
+  setTimeout(() => {
+    const a = document.activeElement;
+    if (S.sheetStale && !S.editing && !($('#sheet').contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) renderSheet(true);
+  }, 250);
+});
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'addForm') return;
+  e.preventDefault();
+  if (!DB) { toast('Open this page on claude.ai to save people.'); return; }
+  const name = $('#a-name').value.trim(); if (!name) return;
+  const phone = $('#a-phone').value.trim(), email = $('#a-email').value.trim();
+  const dupe = S.people.find(p => (phone && phoneKey(p.phone) === phoneKey(phone) && phoneKey(phone).length >= 7) || (email && String(p.email || '').toLowerCase() === email.toLowerCase()));
+  if (dupe) { toast(`${dupe.name} already has that phone or email.`); return; }
+  const nd = Number($('#a-next').value);
+  const note = $('#a-note').value.trim();
+  const body = { name, phone, email, type: $('#a-type').value, stage: 'todo', reason: '', left: '', notes: note,
+    next: nd >= 0 ? addDays(nd) : null, last: null, log: [{ d: today(), t: 'Added' }], created: Date.now() };
+  const ref = DB.collection('people').doc();
+  await write('people/' + ref.id, () => ref.set(body));
+  e.target.reset(); toast(`Added ${name}`);
+});
+
+/* ---------- spreadsheet import ---------- */
+function parseCSV(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = () => res(window.XLSX); s.onerror = rej; document.head.appendChild(s);
+  });
+}
+function guessMap(headers) {
+  const H = headers.map(h => String(h || '').toLowerCase().trim());
+  const used = new Set();
+  const find = (...res) => { for (const re of res) { const i = H.findIndex((h, j) => !used.has(j) && re.test(h)); if (i >= 0) { used.add(i); return i; } } return -1; };
+  const m = {};
+  m.first = find(/first/);
+  m.last = find(/last\s*name|surname/);
+  m.name = find(/^(full\s*)?name$|member\s*name|client\s*name|customer\s*name|contact\s*name|^member$|^client$|^contact$/);
+  m.phone = find(/mobile|cell/, /phone|tel/);
+  m.email = find(/e-?mail/);
+  m.left = find(/cancel/, /terminat|end\s*date|expir|inactive|last\s*(visit|check|attend)|left|freeze/);
+  m.reason = find(/reason/);
+  m.notes = find(/note|comment/);
+  return m;
+}
+async function readFile(file) {
+  S.imp = { fileName: file.name, headers: [], rows: [], map: {}, type: 'former' };
+  $('#imp').innerHTML = '<p class="muted" style="margin:0">Reading your file…</p>';
+  try {
+    const buf = await file.arrayBuffer();
+    let rows;
+    try {
+      const X = await loadXLSX();
+      const wb = X.read(buf, { type: 'array', cellDates: true });
+      rows = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '', dateNF: 'yyyy-mm-dd' });
+    } catch (err) {
+      if (!/\.(csv|txt)$/i.test(file.name)) throw err;
+      rows = parseCSV(new TextDecoder().decode(buf));
+    }
+    rows = rows.map(r => r.map(c => String(c ?? '').trim())).filter(r => r.some(Boolean));
+    if (rows.length < 2) throw new Error('empty');
+    let h = rows.slice(0, 10).findIndex(r => r.some(c => /name|phone|mobile|email/i.test(c)));
+    if (h < 0) h = 0;
+    S.imp.headers = rows[h];
+    S.imp.rows = rows.slice(h + 1);
+    S.imp.map = guessMap(rows[h]);
+  } catch {
+    S.imp.error = "Couldn't read that file. Save it as .csv or .xlsx from your gym software and try again.";
+  }
+  fillImport();
+}
+function planImport() {
+  const I = S.imp, m = I.map;
+  const get = (r, k) => (m[k] >= 0 ? String(r[m[k]] || '').trim() : '');
+  const phones = new Set(S.people.map(p => phoneKey(p.phone)).filter(k => k.length >= 7));
+  const emails = new Set(S.people.map(p => String(p.email || '').toLowerCase()).filter(Boolean));
+  const add = []; let dupes = 0, skipped = 0, noPhone = 0;
+  for (const r of I.rows) {
+    let name = get(r, 'name') || [get(r, 'first'), get(r, 'last')].filter(Boolean).join(' ');
+    const phone = get(r, 'phone'), email = get(r, 'email');
+    if (!name && !phone) { skipped++; continue; }
+    if (!name) name = fmtPhone(phone);
+    const pk = phoneKey(phone), ek = email.toLowerCase();
+    if ((pk.length >= 7 && phones.has(pk)) || (ek && emails.has(ek))) { dupes++; continue; }
+    if (pk.length >= 7) phones.add(pk);
+    if (ek) emails.add(ek);
+    if (!phone) noPhone++;
+    add.push({ name, phone, email, left: normDate(get(r, 'left')), reason: get(r, 'reason'), notes: get(r, 'notes') });
+  }
+  return { add, dupes, skipped, noPhone };
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function runImport() {
+  const I = S.imp; if (!I || I.running || !DB) return;
+  const list = planImport().add;
+  Object.assign(I, { running: true, done: 0, failed: 0, total: list.length });
+  fillImport();
+  const stamp = Date.now();
+  for (let i = 0; i < list.length; i++) {
+    const x = list[i];
+    const body = { ...x, type: I.type, stage: 'todo', next: null, last: null,
+      log: [{ d: today(), t: 'Imported from ' + I.fileName }], created: stamp + i };
+    const ref = DB.collection('people').doc();
+    let ok = false;
+    for (let attempt = 0; attempt < 5 && !ok; attempt++) {
+      try { await ref.set(body); ok = true; }
+      catch (e) {
+        if (e && e.code === 'quota_exceeded') { I.failed += list.length - i; i = list.length; break; }
+        await sleep(800 * (attempt + 1) + Math.random() * 400);
+      }
+    }
+    if (ok) I.done++; else if (i < list.length) I.failed++;
+    if (i % 5 === 0) fillImport();
+  }
+  I.running = false; I.finished = true; fillImport();
+}
+
+/* ---------- start ---------- */
+render();
+(async () => {
+  let db = null;
+  try { db = await window.claude?.use?.('db'); } catch { db = null; }
+  if (!db) { S.noDb = true; S.loaded = true; render(); return; }
+  DB = db;
+  db.collection('people').limit(1000).onSnapshot(snap => {
+    S.people = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    S.loaded = true; render();
+  }, e => { S.loaded = true; render(); toast(errText(e)); });
+  db.doc('settings/main').onSnapshot(snap => {
+    const d = snap.exists ? snap.data() : {};
+    S.templates = Array.isArray(d.templates) ? d.templates : null;
+    S.gym = d.gym || '';
+    if (S.tab === 'msgs' && !$('#view').contains(document.activeElement)) { $('#view').dataset.tab = ''; render(); }
+    if (S.openId) renderSheet(false);
+  }, () => {});
+})();
+</script>
