@@ -338,6 +338,17 @@
     ["cable-crunch", "Cable Crunch", { abs: 1 }],
     ["leg-raise", "Hanging Leg Raise", { abs: 1 }, .3],
     ["crunch", "Crunch / Sit-up", { abs: 1 }, .3],
+    ["thruster", "Thruster", { quads: 1, frontDelts: 1, glutes: .5, triceps: .5 }],
+    ["wall-ball", "Wall Ball", { quads: 1, frontDelts: .5, glutes: .5 }],
+    ["kb-swing", "Kettlebell Swing", { glutes: 1, hamstrings: .5, lowerBack: .5 }],
+    ["power-clean", "Power Clean", { glutes: 1, upperBack: 1, quads: .5, hamstrings: .5 }],
+    ["snatch", "Snatch", { glutes: 1, upperBack: 1, quads: .5, sideDelts: .5 }],
+    ["burpee", "Burpee", { chest: 1, quads: .5, triceps: .5 }, .5],
+    ["box-jump", "Box Jump", { quads: 1, glutes: .5, calves: .5 }, .3],
+    ["t2b", "Toes-to-Bar", { abs: 1, lats: .5, forearms: .5 }, .3],
+    ["du", "Double-Under", { calves: 1 }, .1],
+    ["hspu", "Handstand Push-up", { frontDelts: 1, triceps: .5 }, .65],
+    ["db-snatch", "Dumbbell Snatch", { glutes: 1, sideDelts: .5, upperBack: .5 }],
   ].map(([id, n, m, bw]) => ({ id, n, m, bw: bw || 0 }));
   const LIBMAP = Object.fromEntries(LIB.map(e => [e.id, e]));
 
@@ -378,9 +389,11 @@
   const fmtSets = v => fmtN(v, 1);
   const pct = (a, b) => b > 0 ? Math.round((a - b) / b * 100) : null;
   const KM_MI = 1.609344;
-  const toD = km => S.prefs.dist === "mi" ? km / KM_MI : km;
-  const fromD = v => S.prefs.dist === "mi" ? v * KM_MI : v;
-  const fmtDist = km => fmtN(toD(km || 0), 1);
+  // Distances are stored and shown in km; entry can be km, mi or m and converts on the spot.
+  const DU = { km: 1, mi: KM_MI, m: 0.001 };
+  const toKm = (v, u) => v * DU[u];
+  const fromKm = (km, u) => km / DU[u];
+  const fmtDist = km => fmtN(km || 0, km && km < 10 ? 2 : 1);
   const fmtDur = sec => {
     if (!sec) return "";
     sec = Math.round(sec);
@@ -395,8 +408,27 @@
     const n = p.map(Number);
     return n.length === 1 ? n[0] * 60 : n.length === 2 ? n[0] * 60 + n[1] : n[0] * 3600 + n[1] * 60 + n[2];
   };
-  const fmtPace = (sec, km) => { if (!sec || !km) return "–"; const r = Math.round(sec / toD(km)); return `${Math.floor(r / 60)}:${pad(r % 60)}`; };
-  const minutesOf = s => s.kind === "run" ? (s.dur ? s.dur / 60 : null) : (s.min || null);
+  // per = km in one pace unit: 1 (/km), KM_MI (/mi), 0.5 (/500 m)
+  const fmtPace = (sec, km, per = 1) => { if (!sec || !km) return "–"; const r = Math.round(sec / (km / per)); return `${Math.floor(r / 60)}:${pad(r % 60)}`; };
+  const isLift = s => !s.kind || s.kind === "lift";
+  const minutesOf = s => isLift(s) ? (s.min || null) : (s.dur ? s.dur / 60 : null);
+  const CARDIO_MODES = ["Bike", "Row", "SkiErg", "Swim", "Walk", "Elliptical", "Stairs", "Other"];
+  const MET_FORMATS = ["For time", "AMRAP", "EMOM", "Intervals", "Chipper", "Other"];
+  const ergMode = s => s.kind === "cardio" && (s.mode === "Row" || s.mode === "SkiErg");
+  function sessTitle(s) {
+    if (s.kind === "run") return `Run${s.runType ? " · " + s.runType : ""}${s.dist ? ` · ${fmtDist(s.dist)} km` : ""}`;
+    if (s.kind === "cardio") return `${s.mode || "Cardio"}${s.dist ? ` · ${fmtDist(s.dist)} km` : ""}`;
+    if (s.kind === "metcon") return `Metcon · ${s.name || s.format || "Workout"}`;
+    return s.name || "Workout";
+  }
+  function sessSub(s) {
+    const bits = [];
+    if (s.kind === "run") { bits.push(fmtDur(s.dur) || "No time"); if (s.dist && s.dur) bits.push(`${fmtPace(s.dur, s.dist)} /km`); }
+    else if (s.kind === "cardio") { bits.push(fmtDur(s.dur) || "No time"); if (s.kcal) bits.push(`${s.kcal} cal`); if (s.hr) bits.push(`${s.hr} bpm`); }
+    else if (s.kind === "metcon") { if (s.format) bits.push(s.format); if (s.score) bits.push(s.score); bits.push(s.rx === false ? "Scaled" : "Rx"); }
+    else bits.push((s.items || []).map(i => exById(i.ex).n).join(", ") || "No exercises");
+    return bits.join(" · ");
+  }
   const RPE = { 1: "Barely working", 2: "Very easy", 3: "Easy", 4: "Comfortable", 5: "Moderate", 6: "Somewhat hard", 7: "Hard", 8: "Very hard", 9: "Near max", 10: "All-out" };
   const rpeColor = n => n <= 4 ? "var(--good)" : n <= 6 ? "var(--accent)" : n <= 8 ? "var(--warn)" : "var(--bad)";
   const badge = n => n ? `<span class="badge" style="--rpe-c:${rpeColor(n)}" title="Session RPE ${n}: ${RPE[n]}">RPE ${n}</span>` : "";
@@ -426,6 +458,13 @@
     const m = {}; let sets = 0, ton = 0;
     for (const s of sessions) for (const it of s.items || []) {
       const ex = exById(it.ex);
+      if (s.kind === "metcon") {
+        const t = Math.max(0, setLoad(ex, it)) * (Number(it.reps) || 0);
+        if (!t) continue;
+        ton += t;
+        for (const [k, f] of Object.entries(ex.m)) { const x = m[k] || (m[k] = { s: 0, t: 0, ex: {} }); x.t += t * f; }
+        continue;
+      }
       for (const set of it.sets || []) {
         if (!counts(set)) continue;
         const t = Math.max(0, setLoad(ex, set)) * Number(set.r);
@@ -436,7 +475,7 @@
         }
       }
     }
-    return { m, sets, ton, workouts: sessions.filter(s => s.kind !== "run").length };
+    return { m, sets, ton, workouts: sessions.length, lifts: sessions.filter(isLift).length };
   }
   function runStats(sessions) {
     const runs = sessions.filter(s => s.kind === "run" && s.dist > 0);
@@ -447,6 +486,20 @@
       longest: runs.reduce((a, r) => Math.max(a, r.dist), 0),
       paceSec: timed.reduce((a, r) => a + r.dur, 0), paceKm: timed.reduce((a, r) => a + r.dist, 0),
     };
+  }
+  function cardioStats(sessions) {
+    const by = {}; let n = 0, sec = 0, km = 0, kcal = 0, hrSec = 0, hrSum = 0;
+    for (const s of sessions) {
+      if (isLift(s)) continue;
+      const key = s.kind === "run" ? "Run" : s.kind === "metcon" ? "Metcon" : (s.mode || "Other");
+      const b = by[key] || (by[key] = { n: 0, sec: 0, km: 0, kcal: 0, timedKm: 0, timedSec: 0 });
+      b.n++; n++;
+      const d = s.dur || 0, k = s.dist || 0;
+      b.sec += d; sec += d; b.km += k; km += k; b.kcal += s.kcal || 0; kcal += s.kcal || 0;
+      if (d && k) { b.timedKm += k; b.timedSec += d; }
+      if (s.hr && d) { hrSec += d; hrSum += s.hr * d; }
+    }
+    return { by, n, sec, km, kcal, hr: hrSec ? Math.round(hrSum / hrSec) : null };
   }
   // Session load = session RPE × minutes (Foster's sRPE method), summed for the week.
   function effortStats(sessions) {
@@ -466,7 +519,7 @@
   function lastTime(exId, cur) {
     for (const s of sessionList()) {
       if (cur && (s.id === cur.id || s.date > cur.date)) continue;
-      const it = (s.items || []).find(i => i.ex === exId && i.sets.some(counts));
+      const it = isLift(s) && (s.items || []).find(i => i.ex === exId && (i.sets || []).some(counts));
       if (it) return { date: s.date, sets: it.sets.filter(counts) };
     }
     return null;
@@ -494,6 +547,10 @@
         const [rpe, min, note] = { Push: [7, 62, "Bench moved well. Left shoulder slightly tight on overhead press."], Pull: [7, 58, "Grip went before back on rows."], Legs: [8, 70, "Squats felt heavy. Hamstrings still sore from the long run."] }[name];
         out.push({ id: `example-${w}-${name}`, date, name, items, createdAt: 0, rpe: rpe + (w === 0 && name === "Legs" ? 1 : 0), min, notes: w === 0 ? note : "" });
       });
+      if (addDays(ws, 3) <= today()) out.push({ id: `example-${w}-metcon`, kind: "metcon", date: addDays(ws, 3), name: "Fran", format: "For time", rx: true,
+        dur: 600 - step * 20, score: fmtDur(600 - step * 20), hr: 171, kcal: 160, rpe: 9, createdAt: 0, notes: w === 0 ? "Broke thrusters 11-10, 8-7, 5-4. Pull-ups unbroken." : "",
+        items: [{ ex: "thruster", reps: 45, w: 43 }, { ex: "pullup", reps: 45, w: 0 }] });
+      if (addDays(ws, 6) <= today()) out.push({ id: `example-${w}-row`, kind: "cardio", mode: "Row", date: addDays(ws, 6), dist: 5, dur: 1260 - step * 10, kcal: 310, hr: 146, rpe: 5, createdAt: 0, notes: "" });
       [[1, "Easy", 6, 345, 4], [5, "Long", 10 + step, 365, 6]].forEach(([day, runType, dist, pace, rpe]) => {
         const date = addDays(ws, day);
         if (date > today()) return;
@@ -702,17 +759,19 @@
     if (!s) {
       const recent = [];
       const seen = new Set();
-      for (const x of sessionList()) { if (x.kind === "run") continue; const key = (x.name || "").toLowerCase() || x.id; if (seen.has(key)) continue; seen.add(key); recent.push(x); if (recent.length === 4) break; }
+      for (const x of sessionList()) { if (!isLift(x)) continue; const key = (x.name || "").toLowerCase() || x.id; if (seen.has(key)) continue; seen.add(key); recent.push(x); if (recent.length === 4) break; }
       const todays = sessionList().filter(x => x.date === today());
       return `
         <section class="card start">
           <div class="label">${esc(fmtDay(today(), { weekday: "long", month: "long", day: "numeric" }))}</div>
           <h2 class="h1">Ready to train?</h2>
           <div class="row" style="display:grid;grid-template-columns:1fr 1fr">
-            <button class="btn primary" data-act="start">Start lifting</button>
-            <button class="btn primary" data-act="start-run">Log a run</button>
+            <button class="btn primary" data-act="start">Lifting</button>
+            <button class="btn primary" data-act="start-kind:run">Run</button>
+            <button class="btn primary" data-act="start-kind:metcon">Metcon</button>
+            <button class="btn primary" data-act="start-kind:cardio">Other cardio</button>
           </div>
-          ${todays.map(t => `<button class="btn wide" data-act="open:${t.id}">Continue ${t.kind === "run" ? `today's run` : esc(t.name || "today's workout")}</button>`).join("")}
+          ${todays.map(t => `<button class="btn wide" data-act="open:${t.id}">Continue ${esc(sessTitle(t))}</button>`).join("")}
         </section>
         <section class="card">
           <div class="row between"><h2 class="h2">Today's note</h2><button class="btn small" data-act="journal-today">${hasDay(S.days[today()]) ? "Edit" : "Add note"}</button></div>
@@ -728,6 +787,8 @@
         ${S.mode === "loading" ? `<p class="muted" style="text-align:center;font-size:13px">Loading your log…</p>` : ""}`;
     }
     if (s.kind === "run") return viewRun(s);
+    if (s.kind === "cardio") return viewCardio(s);
+    if (s.kind === "metcon") return viewMetcon(s);
     const st = statsFor([s]);
     const bwMissing = !S.prefs.bodyweight;
     return `
@@ -764,25 +825,89 @@
   }
 
   const RUN_TYPES = ["Easy", "Long", "Tempo", "Intervals", "Race", "Recovery"];
-  function paceHtml(s) { return `${fmtPace(s.dur, s.dist)}<small> /${S.prefs.dist}</small>`; }
+  const distUnit = s => s.du || (ergMode(s) || (s.kind === "cardio" && s.mode === "Swim") ? "m" : S.prefs.dist === "mi" ? "mi" : "km");
+  function convText(s) {
+    if (!s.dist) return "Converted to km automatically.";
+    const u = distUnit(s);
+    return u === "km" ? `= ${fmtN(fromKm(s.dist, "mi"), 2)} mi` : `= ${fmtN(s.dist, 2)} km`;
+  }
+  function distBlock(s, units) {
+    const u = distUnit(s);
+    const v = s.dist ? Math.round(fromKm(s.dist, u) * (u === "m" ? 1 : 100)) / (u === "m" ? 1 : 100) : "";
+    return `<div class="field">
+      <div class="row between"><label for="r-dist">Distance</label><div class="seg" role="group" aria-label="Distance unit">${units.map(x => `<button data-act="du:${x}" aria-pressed="${u === x}">${x}</button>`).join("")}</div></div>
+      <input id="r-dist" inputmode="decimal" value="${v}" placeholder="${u === "m" ? "2000" : u === "mi" ? "5" : "8"}">
+      <span class="muted" id="r-conv" style="font-size:12.5px">${convText(s)}</span>
+    </div>`;
+  }
+  function paceHtml(s) {
+    if (s.kind === "cardio" && s.mode === "Bike") return s.dist && s.dur ? `${fmtN(s.dist / (s.dur / 3600), 1)}<small> km/h</small>` : `–<small> km/h</small>`;
+    if (ergMode(s)) return `${fmtPace(s.dur, s.dist, .5)}<small> /500 m</small>`;
+    if (s.kind === "cardio" && s.mode === "Swim") return `${fmtPace(s.dur, s.dist, .1)}<small> /100 m</small>`;
+    return `${fmtPace(s.dur, s.dist)}<small> /km</small> <small class="mono">· ${fmtPace(s.dur, s.dist, KM_MI)} /mi</small>`;
+  }
+  const timeField = (label = "Time", ph = "45:30") => `<div class="field"><label for="r-dur">${label}</label><input type="text" id="r-dur" value="" placeholder="${ph}" autocomplete="off"></div>`;
+  const numField = (id, label, v, ph) => `<div class="field"><label for="${id}">${label}</label><input id="${id}" inputmode="numeric" value="${v ?? ""}" placeholder="${ph}"></div>`;
+  const kindFoot = (s, word) => `
+      <section class="card"><h2 class="h2">How did it go?</h2>${effortFields(s, false)}</section>
+      <div class="row between">
+        <button class="btn danger small" data-act="del-session" data-confirm="Tap again to delete">Delete ${word}</button>
+        <button class="btn primary" data-act="done">Save ${word} & see report</button>
+      </div>`;
+  const withDur = (html, s) => html.replace(`id="r-dur" value=""`, `id="r-dur" value="${esc(fmtDur(s.dur))}"`);
+
   function viewRun(s) {
-    const du = S.prefs.dist;
-    return `<section class="card">
+    return withDur(`<section class="card">
         <div class="row between"><span class="label">Run</span><button class="btn ghost small" data-act="done">Done</button></div>
         <input type="date" id="s-date" value="${esc(s.date)}" aria-label="Run date">
         <div class="chips-row" role="group" aria-label="Run type" style="flex-wrap:wrap">${RUN_TYPES.map(t => `<button data-act="rtype:${t}" aria-pressed="${s.runType === t}">${t}</button>`).join("")}</div>
-        <div class="run-grid">
-          <div class="field"><label for="r-dist">Distance (${du})</label><input id="r-dist" inputmode="decimal" value="${s.dist ? Math.round(toD(s.dist) * 100) / 100 : ""}" placeholder="8"></div>
-          <div class="field"><label for="r-dur">Time</label><input type="text" id="r-dur" value="${esc(fmtDur(s.dur))}" placeholder="45:30" autocomplete="off"></div>
-          <div class="field"><label for="r-hr">Avg HR</label><input id="r-hr" inputmode="numeric" value="${s.hr ?? ""}" placeholder="bpm"></div>
-        </div>
+        ${distBlock(s, ["km", "mi"])}
+        <div class="run-grid">${timeField()}${numField("r-hr", "Avg HR", s.hr, "bpm")}${numField("c-kcal", "Calories", s.kcal, "kcal")}</div>
         <div><span class="label">Avg pace</span><div class="pace num" id="r-pace">${paceHtml(s)}</div></div>
+      </section>`, s) + kindFoot(s, "run");
+  }
+  function viewCardio(s) {
+    return withDur(`<section class="card">
+        <div class="row between"><span class="label">Cardio</span><button class="btn ghost small" data-act="done">Done</button></div>
+        <input type="date" id="s-date" value="${esc(s.date)}" aria-label="Session date">
+        <div class="chips-row" role="group" aria-label="Machine or activity" style="flex-wrap:wrap">${CARDIO_MODES.map(t => `<button data-act="cmode:${t}" aria-pressed="${s.mode === t}">${t}</button>`).join("")}</div>
+        ${distBlock(s, ["km", "mi", "m"])}
+        <div class="run-grid">${timeField("Time", "20:00")}${numField("r-hr", "Avg HR", s.hr, "bpm")}${numField("c-kcal", "Calories", s.kcal, "kcal")}</div>
+        <div><span class="label">${s.mode === "Bike" ? "Avg speed" : "Avg pace"}</span><div class="pace num" id="r-pace">${paceHtml(s)}</div></div>
+      </section>`, s) + kindFoot(s, "session");
+  }
+  function viewMetcon(s) {
+    const capped = s.format === "AMRAP" || s.format === "EMOM";
+    const u = S.prefs.unit;
+    return withDur(`<section class="card">
+        <div class="row between"><span class="label">Metcon</span><button class="btn ghost small" data-act="done">Done</button></div>
+        <div class="session-h">
+          <input type="date" id="s-date" value="${esc(s.date)}" aria-label="Metcon date">
+          <input type="text" id="s-name" value="${esc(s.name || "")}" placeholder="Name, e.g. Fran" aria-label="Metcon name">
+        </div>
+        <div class="chips-row" role="group" aria-label="Format" style="flex-wrap:wrap">${MET_FORMATS.map(t => `<button data-act="mformat:${t}" aria-pressed="${s.format === t}">${t}</button>`).join("")}</div>
+        <div class="field"><label for="m-desc">Workout</label><textarea id="m-desc" placeholder="21-15-9 for time: thrusters 43 kg, pull-ups">${esc(s.desc || "")}</textarea></div>
+        <div class="run-grid">
+          ${timeField(capped ? "Length" : "Time", capped ? "20:00" : "9:30")}
+          <div class="field"><label for="m-score">Score</label><input type="text" id="m-score" value="${esc(s.score || "")}" placeholder="${s.format === "AMRAP" ? "5+12" : s.format === "EMOM" ? "All rounds" : "9:30"}"></div>
+          <div class="field"><span style="font-size:12.5px;color:var(--muted)">Standard</span><div class="seg" role="group" aria-label="Rx or scaled"><button data-act="rx:1" aria-pressed="${s.rx !== false}">Rx</button><button data-act="rx:0" aria-pressed="${s.rx === false}">Scaled</button></div></div>
+        </div>
+        <div class="run-grid">${numField("r-hr", "Avg HR", s.hr, "bpm")}${numField("c-kcal", "Calories", s.kcal, "kcal")}</div>
       </section>
-      <section class="card"><h2 class="h2">How did it go?</h2>${effortFields(s, false)}</section>
-      <div class="row between">
-        <button class="btn danger small" data-act="del-session" data-confirm="Tap again to delete">Delete run</button>
-        <button class="btn primary" data-act="done">Save run & see report</button>
-      </div>`;
+      <section class="card">
+        <div class="row between"><h2 class="h2">Movements</h2><span class="muted" style="font-size:12.5px">Optional</span></div>
+        <p class="muted" style="font-size:13px">Add movements with total reps to count their load toward your body-part report. They add load, not hard sets.</p>
+        ${(s.items || []).length ? `<div class="sets">
+          <div class="sets-h" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) 32px"><span>Movement</span><span style="text-align:center">Total reps</span><span style="text-align:center">${u}</span><span></span></div>
+          ${s.items.map((it, i) => `<div class="set" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) 32px">
+            <span style="font-size:13.5px;font-weight:500;min-width:0;overflow-wrap:anywhere">${esc(exById(it.ex).n)}</span>
+            <input id="mv-r-${i}" inputmode="numeric" value="${it.reps ?? ""}" placeholder="reps" aria-label="${esc(exById(it.ex).n)} total reps">
+            <input id="mv-w-${i}" inputmode="decimal" value="${fmtW(it.w)}" placeholder="${exById(it.ex).bw ? "+" + u : u}" aria-label="${esc(exById(it.ex).n)} weight">
+            <button class="x" data-act="rm-mv:${i}" aria-label="Remove ${esc(exById(it.ex).n)}">×</button>
+          </div>`).join("")}
+        </div>` : ""}
+        <button class="btn small" data-act="add-ex">+ Add movement</button>
+      </section>`, s) + kindFoot(s, "metcon");
   }
   function totHtml(st) {
     return `<div><span class="label">Hard sets</span><b class="num">${st.sets}</b></div>
@@ -834,18 +959,19 @@
 
     const wk = inWeek(src, ws), wkPrev = inWeek(src, addDays(ws, -7));
     const rs = runStats(wk), rsPrev = runStats(wkPrev);
-    const runHist = [-5, -4, -3, -2, -1, 0].map(i => runStats(inWeek(src, addDays(ws, 7 * i))).dist);
+    const cs = cardioStats(wk), csPrev = cardioStats(wkPrev);
+    const cardioHist = [-5, -4, -3, -2, -1, 0].map(i => cardioStats(inWeek(src, addDays(ws, 7 * i))).sec / 60);
     const ef = effortStats(wk), efPrev = effortStats(wkPrev);
     const dsx = example ? { energy: null, soreness: null, sleep: null } : dayStats(ws);
-    const du = S.prefs.dist;
 
     // alerts
     const alerts = [];
-    if (rsPrev.dist >= 5 && rs.dist > rsPrev.dist * 1.1) alerts.push(["warn", `<b>Running</b> distance is up ${pct(rs.dist, rsPrev.dist)}% (${fmtDist(rsPrev.dist)} → ${fmtDist(rs.dist)} ${du}). A common guide is to add no more than about 10% a week.`]);
+    if (rsPrev.dist >= 5 && rs.dist > rsPrev.dist * 1.1) alerts.push(["warn", `<b>Running</b> distance is up ${pct(rs.dist, rsPrev.dist)}% (${fmtDist(rsPrev.dist)} → ${fmtDist(rs.dist)} km). A common guide is to add no more than about 10% a week.`]);
     if (efPrev.load > 0 && ef.load > efPrev.load * 1.3) alerts.push(["warn", `<b>Session load</b> (RPE × minutes) is up ${pct(ef.load, efPrev.load)}% on last week. Watch how you recover.`]);
     if (ef.rated >= 3 && ef.avg >= 8.5) alerts.push(["bad", `<b>Average session RPE was ${fmtN(ef.avg, 1)}.</b> Most sessions were very hard. Add some easy days so you can recover.`]);
     if (dsx.soreness >= 4) alerts.push(["warn", `Daily notes show soreness averaging ${fmtN(dsx.soreness, 1)}/5 this week. Consider a lighter few days.`]);
-    if (cur.workouts) {
+    if (csPrev.sec >= 1800 && cs.sec > csPrev.sec * 1.3) alerts.push(["warn", `<b>Cardio time</b> is up ${pct(cs.sec, csPrev.sec)}% (${fmtHM(csPrev.sec)} → ${fmtHM(cs.sec)}). Big jumps in conditioning volume add up fast; check your recovery.`]);
+    if (cur.lifts) {
       for (const mm of MUSCLES) {
         const a = cur.m[mm.k]?.s || 0, b = prev.m[mm.k]?.s || 0;
         if (b >= 4 && a > b * 1.3) alerts.push(["warn", `<b>${mm.n}</b> sets jumped ${pct(a, b)}% (${fmtSets(b)} → ${fmtSets(a)}). Jumps over about 30% raise injury risk; consider holding here next week.`]);
@@ -856,7 +982,7 @@
       const t = hist.slice(2).map(h => h.sets);
       if (t.length === 4 && t.every((v, i) => i === 0 || v > t[i - 1]) && t[0] > 0) alerts.push(["good", `Volume has climbed four weeks in a row. A lighter deload week soon will help you recover and keep progressing.`]);
     }
-    if ((cur.workouts || rs.n) && !alerts.length) alerts.push(["good", "Balanced week. Every muscle got work and nothing spiked."]);
+    if (cur.workouts && !alerts.length) alerts.push(["good", "Balanced week. Every muscle got work and nothing spiked."]);
     const effList = [...wk].sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || 0) - (b.createdAt || 0));
 
     const rows = GROUPS.map(g => {
@@ -891,7 +1017,7 @@
         <button class="navb" data-act="week:1" aria-label="Next week" ${ws >= thisWs ? "disabled" : ""}>›</button>
       </div>
       <div class="kpis">
-        <div class="kpi"><span class="label">Workouts</span><b class="num">${cur.workouts}</b><small>${prev.workouts} last week</small></div>
+        <div class="kpi"><span class="label">Sessions</span><b class="num">${cur.workouts}</b><small>${prev.workouts} last week</small></div>
         <div class="kpi"><span class="label">Hard sets</span><b class="num">${cur.sets}</b>${delta(dSets)}</div>
         <div class="kpi"><span class="label">Load (${S.prefs.unit})</span><b class="num">${fmtLoad(cur.ton)}</b>${delta(dTon)}</div>
       </div>
@@ -910,13 +1036,21 @@
         <div class="legend"><span class="zero">0</span><div class="bar"></div><span class="mono">${metric === "sets" ? "20+ sets" : fmtLoad(scale) + " " + S.prefs.unit}</span></div>
         <div class="readout" id="readout">${readout}</div>
       </section>
-      ${rs.n || rsPrev.n || runHist.some(Boolean) ? `<section class="card">
-        <div class="row between"><h2 class="h2">Running</h2><span class="row" style="gap:6px"><span class="label">6 wk</span>${spark(runHist)}</span></div>
+      ${cs.n || csPrev.n || cardioHist.some(Boolean) ? `<section class="card">
+        <div class="row between"><h2 class="h2">Cardio output</h2><span class="row" style="gap:6px"><span class="label">6 wk min</span>${spark(cardioHist)}</span></div>
         <div class="kpis">
-          <div class="kpi"><span class="label">Distance</span><b class="num">${fmtDist(rs.dist)}</b><small>${du}${rsPrev.dist ? ` · ${pct(rs.dist, rsPrev.dist) >= 0 ? "+" : ""}${pct(rs.dist, rsPrev.dist)}%` : ""}</small></div>
-          <div class="kpi"><span class="label">Time</span><b class="num">${fmtHM(rs.dur)}</b><small>${rs.n} run${rs.n === 1 ? "" : "s"}</small></div>
-          <div class="kpi"><span class="label">Avg pace</span><b class="num">${fmtPace(rs.paceSec, rs.paceKm)}</b><small>/${du} · longest ${fmtDist(rs.longest)}</small></div>
+          <div class="kpi"><span class="label">Time</span><b class="num">${fmtHM(cs.sec)}</b>${csPrev.sec ? delta(pct(cs.sec, csPrev.sec)) : `<small>${cs.n} session${cs.n === 1 ? "" : "s"}</small>`}</div>
+          <div class="kpi"><span class="label">Distance</span><b class="num">${fmtDist(cs.km)}</b><small>km · ${fmtN(fromKm(cs.km, "mi"), 1)} mi</small></div>
+          <div class="kpi"><span class="label">Calories</span><b class="num">${cs.kcal ? fmtN(cs.kcal) : "–"}</b><small>${cs.hr ? `avg HR ${cs.hr}` : "logged kcal"}</small></div>
         </div>
+        ${cs.n ? `<div class="mt">
+          <div class="mt-r head" style="grid-template-columns:minmax(0,1fr) 40px 70px 96px"><span>Type</span><span style="text-align:right">#</span><span style="text-align:right">Time</span><span style="text-align:right">Distance</span></div>
+          ${["Run", "Metcon", ...CARDIO_MODES].filter(k => cs.by[k]).map(k => { const b = cs.by[k];
+            const pace = k === "Run" && b.timedKm ? `${fmtPace(b.timedSec, b.timedKm)} /km` : (k === "Row" || k === "SkiErg") && b.timedKm ? `${fmtPace(b.timedSec, b.timedKm, .5)} /500 m` : k === "Bike" && b.timedKm ? `${fmtN(b.timedKm / (b.timedSec / 3600), 1)} km/h` : b.kcal ? `${fmtN(b.kcal)} cal` : "";
+            return `<div class="mt-r" style="grid-template-columns:minmax(0,1fr) 40px 70px 96px"><span class="nm"><span>${k}</span>${k === "Run" && rs.longest ? `<small class="muted" style="font-size:11.5px">longest ${fmtDist(rs.longest)} km</small>` : ""}</span>
+              <span class="v">${b.n}</span><span class="v">${fmtHM(b.sec)}</span><span class="v">${b.km ? fmtDist(b.km) + " km" : "–"}${pace ? `<small>${pace}</small>` : ""}</span></div>`;
+          }).join("")}
+        </div>` : `<p class="muted" style="font-size:13.5px">No cardio logged this week.</p>`}
       </section>` : ""}
       <section class="card">
         <h2 class="h2">Effort & notes</h2>
@@ -927,7 +1061,7 @@
         </div>
         ${effList.length ? `<div class="eff-list">${effList.map(s => {
           const tag = example ? "div" : "button";
-          const title = s.kind === "run" ? `Run${s.runType ? " · " + s.runType : ""} · ${fmtDist(s.dist)} ${du}` : esc(s.name || "Workout");
+          const title = esc(sessTitle(s)) + (s.kind === "metcon" && s.score ? ` · ${esc(s.score)}` : "");
           return `<${tag} class="eff" ${example ? "" : `data-act="open:${s.id}"`}>
             <span class="d">${esc(fmtDay(s.date, { day: "numeric" }))}<small>${esc(fmtDay(s.date, { weekday: "short" }))}</small></span>
             <span class="t"><b>${title}</b>${s.notes ? `<span class="clamp">${esc(s.notes)}</span>` : s.rpe ? "" : `<span>Not rated yet</span>`}</span>
@@ -935,14 +1069,14 @@
           </${tag}>`;
         }).join("")}</div>` : ""}
       </section>
-      ${cur.workouts || rs.n ? `<section class="card"><h2 class="h2">Notes on this week</h2><div class="alerts">${alerts.map(([k, t]) => `<div class="alert" data-k="${k}"><span>${t}</span></div>`).join("")}</div></section>` : `<section class="card"><p class="muted">No workouts logged this week.</p></section>`}
+      ${cur.workouts ? `<section class="card"><h2 class="h2">Notes on this week</h2><div class="alerts">${alerts.map(([k, t]) => `<div class="alert" data-k="${k}"><span>${t}</span></div>`).join("")}</div></section>` : `<section class="card"><p class="muted">No workouts logged this week.</p></section>`}
       <section class="card">
         <div class="row between"><h2 class="h2">By body part</h2><button class="btn small" data-act="copy-report">Copy as text</button></div>
         <div class="mt">
           <div class="mt-r head"><span>Muscle</span><span style="text-align:right">Sets</span><span style="text-align:right">Load ${S.prefs.unit}</span><span style="text-align:right">6 wk</span></div>
           ${rows}
         </div>
-        <p class="foot">A set counts in full for the main muscles an exercise works and as half a set for helpers (bench press counts as half a set for triceps and front delts). Warm-up sets and sets without reps don't count. Load is weight × reps, plus bodyweight on lifts like pull-ups. 10–20 hard sets per muscle a week is a common range for building muscle.</p>
+        <p class="foot">A set counts in full for the main muscles an exercise works and as half a set for helpers (bench press counts as half a set for triceps and front delts). Warm-up sets and sets without reps don't count. Load is weight × reps, plus bodyweight on lifts like pull-ups. Metcon movements add load but not hard sets. 10–20 hard sets per muscle a week is a common range for building muscle.</p>
       </section>`;
   }
   const dsm = (d, show) => !show ? `<small>&nbsp;</small>` : `<small class="${d > 0 ? "up" : d < 0 ? "down" : ""}">${d > 0 ? "+" : d < 0 ? "−" : "±"}${fmtSets(Math.abs(d))}</small>`;
@@ -952,9 +1086,12 @@
     const real = sessionList(); const src = real.length ? real : exampleSessions();
     const ws = S.reportWeek || weekStart(today());
     const cur = weekStats(src, ws), u = S.prefs.unit;
-    const wk = inWeek(src, ws), rs = runStats(wk), ef = effortStats(wk);
-    const lines = [`Load Ledger: week of ${weekLabel(ws)}`, `${cur.workouts} workouts · ${cur.sets} hard sets · ${fmtLoad(cur.ton)} ${u}`];
-    if (rs.n) lines.push(`Running: ${rs.n} runs · ${fmtDist(rs.dist)} ${S.prefs.dist} · ${fmtHM(rs.dur)}`);
+    const wk = inWeek(src, ws), cs = cardioStats(wk), ef = effortStats(wk);
+    const lines = [`Load Ledger: week of ${weekLabel(ws)}`, `${cur.workouts} sessions · ${cur.sets} hard sets · ${fmtLoad(cur.ton)} ${u}`];
+    if (cs.n) {
+      lines.push(`Cardio output: ${fmtHM(cs.sec)} · ${fmtDist(cs.km)} km${cs.kcal ? ` · ${fmtN(cs.kcal)} cal` : ""}`);
+      for (const [k, b] of Object.entries(cs.by)) lines.push(`  ${k}: ${b.n} × · ${fmtHM(b.sec)}${b.km ? ` · ${fmtDist(b.km)} km` : ""}`);
+    }
     if (ef.rated) lines.push(`Avg session RPE ${fmtN(ef.avg, 1)} · session load ${fmtN(ef.load)}`);
     lines.push("");
     for (const g of GROUPS) {
@@ -975,13 +1112,13 @@
       return `<section class="wk">
         <div class="wk-h"><h2 class="h2">${esc(weekLabel(ws))}</h2><button class="btn ghost small" data-act="goto-week:${ws}">${ss.length} session${ss.length > 1 ? "s" : ""} · ${st.sets} sets · Report ›</button></div>
         ${ss.map(s => {
-          const run = s.kind === "run", x = statsFor([s]), du = S.prefs.dist;
+          const x = statsFor([s]);
           return `<button class="sess" data-act="open:${s.id}">
             <span class="d">${esc(fmtDay(s.date, { day: "numeric" }))}<small>${esc(fmtDay(s.date, { weekday: "short", month: "short" }))}</small></span>
-            <span class="t"><span class="row" style="gap:8px"><b>${run ? `Run${s.runType ? " · " + esc(s.runType) : ""}` : esc(s.name || "Workout")}</b>${badge(s.rpe)}</span>
-              <div>${run ? `${fmtDur(s.dur) || "No time"} · ${fmtPace(s.dur, s.dist)} /${du}` : esc((s.items || []).map(i => exById(i.ex).n).join(", ") || "No exercises")}</div>
+            <span class="t"><span class="row" style="gap:8px"><b>${esc(sessTitle(s))}</b>${badge(s.rpe)}</span>
+              <div>${esc(sessSub(s))}</div>
               ${s.notes ? `<div>${esc(s.notes)}</div>` : ""}</span>
-            <span class="mono muted" style="font-size:12.5px;text-align:right">${run ? `${fmtDist(s.dist)} ${du}` : `${x.sets} sets<br>${fmtLoad(x.ton)} ${S.prefs.unit}`}</span>
+            <span class="mono muted" style="font-size:12.5px;text-align:right">${isLift(s) ? `${x.sets} sets<br>${fmtLoad(x.ton)} ${S.prefs.unit}` : s.dist ? `${fmtDist(s.dist)} km` : fmtDur(s.dur)}</span>
           </button>`;
         }).join("")}
       </section>`;
@@ -996,7 +1133,8 @@
       <section class="card">
         <h2 class="h2">Units & week</h2>
         <div class="row between"><span>Weight unit</span><div class="seg"><button data-act="unit:kg" aria-pressed="${S.prefs.unit === "kg"}">kg</button><button data-act="unit:lb" aria-pressed="${S.prefs.unit === "lb"}">lb</button></div></div>
-        <div class="row between"><span>Distance unit</span><div class="seg"><button data-act="dist:km" aria-pressed="${S.prefs.dist !== "mi"}">km</button><button data-act="dist:mi" aria-pressed="${S.prefs.dist === "mi"}">mi</button></div></div>
+        <div class="field"><div class="row between"><span>Enter run distances in</span><div class="seg"><button data-act="dist:km" aria-pressed="${S.prefs.dist !== "mi"}">km</button><button data-act="dist:mi" aria-pressed="${S.prefs.dist === "mi"}">mi</button></div></div>
+          <span class="muted" style="font-size:12.5px">Miles convert to km as you type. Reports always show km.</span></div>
         <div class="row between"><span>Week starts on</span><div class="seg"><button data-act="ws:1" aria-pressed="${S.prefs.weekStart === 1}">Monday</button><button data-act="ws:0" aria-pressed="${S.prefs.weekStart === 0}">Sunday</button></div></div>
         <div class="field">
           <label for="bw">Bodyweight (${S.prefs.unit})</label>
@@ -1026,7 +1164,7 @@
       ${[0, 5, 10].map(v => `<line class="grid" x1="${l}" x2="${W - r}" y1="${y(v)}" y2="${y(v)}"/><text x="${l - 6}" y="${y(v) + 3.5}" text-anchor="end">${v}</text>`).join("")}
       ${list.map((s, i) => {
         const x = l + step * i + (step - bw) / 2;
-        return `<rect x="${x.toFixed(1)}" y="${y(s.rpe).toFixed(1)}" width="${bw.toFixed(1)}" height="${(ih * s.rpe / 10).toFixed(1)}" rx="2" style="fill:${rpeColor(s.rpe)}"><title>${esc(fmtDay(s.date, { month: "short", day: "numeric" }))} · ${s.kind === "run" ? "Run" : esc(s.name || "Workout")} · RPE ${s.rpe}</title></rect>
+        return `<rect x="${x.toFixed(1)}" y="${y(s.rpe).toFixed(1)}" width="${bw.toFixed(1)}" height="${(ih * s.rpe / 10).toFixed(1)}" rx="2" style="fill:${rpeColor(s.rpe)}"><title>${esc(fmtDay(s.date, { month: "short", day: "numeric" }))} · ${esc(sessTitle(s))} · RPE ${s.rpe}</title></rect>
           <text x="${(x + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${parseD(s.date).getDate()}</text>`;
       }).join("")}
     </svg>`;
@@ -1059,7 +1197,7 @@
           <div class="row between"><h2 class="h2">${esc(fmtDay(date, { weekday: "short", month: "short", day: "numeric" }))}</h2>${hasDay(day) ? `<button class="btn ghost small" data-act="jdate:${date}">Edit note</button>` : ""}</div>
           ${hasDay(day) ? `<div class="card"><div class="ready">${readyLine(day)}</div>${(day.note || "").trim() ? `<p class="note-txt">${esc(day.note)}</p>` : ""}</div>` : ""}
           ${ss.map(s => `<button class="sess" data-act="open:${s.id}" style="grid-template-columns:minmax(0,1fr) auto">
-            <span class="t"><b>${s.kind === "run" ? `Run${s.runType ? " · " + esc(s.runType) : ""} · ${fmtDist(s.dist)} ${S.prefs.dist}` : esc(s.name || "Workout")}</b>
+            <span class="t"><b>${esc(sessTitle(s))}</b>
               <div style="white-space:normal">${s.notes ? esc(s.notes) : s.rpe ? RPE[s.rpe] : "No notes or rating yet. Tap to add."}</div></span>
             ${badge(s.rpe)}
           </button>`).join("")}
@@ -1126,9 +1264,11 @@
   function setCurrent(id) { S.currentId = id; LS.set("current", id); }
   function newSession(items, name, kind) {
     const id = uid("s");
-    S.sessions[id] = kind === "run"
-      ? { id, kind: "run", date: today(), runType: "Easy", dist: null, dur: null, createdAt: Date.now() }
-      : { id, date: today(), name: name || "", items: items || [], createdAt: Date.now() };
+    const base = { id, date: today(), createdAt: Date.now() };
+    S.sessions[id] = kind === "run" ? { ...base, kind, runType: "Easy", dist: null, dur: null }
+      : kind === "cardio" ? { ...base, kind, mode: "Bike", dist: null, dur: null }
+      : kind === "metcon" ? { ...base, kind, name: "", format: "For time", rx: true, items: [], dur: null }
+      : { ...base, name: name || "", items: items || [] };
     setCurrent(id); saveSession(id, 0);
     return id;
   }
@@ -1142,11 +1282,23 @@
     switch (act) {
       case "tab": setTab(a); break;
       case "start": newSession(); setTab("log"); break;
-      case "start-run": newSession(null, "", "run"); setTab("log"); break;
+      case "start-kind": newSession(null, "", a); setTab("log"); break;
+      case "cmode": if (s) { s.mode = a; delete s.du; saveSession(s.id); render(); } break;
+      case "mformat": if (s) { s.format = a; saveSession(s.id); render(); } break;
+      case "rx": if (s) { s.rx = a === "1"; saveSession(s.id); render(); } break;
+      case "rm-mv": if (s) { s.items.splice(+a, 1); saveSession(s.id); render(); } break;
+      case "du": if (s) {
+        // keep the number the person typed and read it in the new unit
+        if (s.dist) { const old = distUnit(s); s.dist = toKm(Math.round(fromKm(s.dist, old) * 1000) / 1000, a); }
+        s.du = a;
+        if (s.kind === "run" && S.prefs.dist !== a) { S.prefs.dist = a; savePrefs(); }
+        saveSession(s.id); render();
+      } break;
       case "rtype": if (s) { s.runType = a; saveSession(s.id); render(); } break;
       case "rpe": if (s) { s.rpe = s.rpe === +a ? null : +a; if (!s.rpe) delete s.rpe; saveSession(s.id); render(); } break;
       case "finish": {
         if (!s) break;
+        if (!isLift(s)) { S.sheet = false; break; }
         if (s.min == null && s.date === today() && s.createdAt) {
           const mins = Math.round((Date.now() - s.createdAt) / 60000);
           if (mins >= 10 && mins <= 240) { s.min = mins; saveSession(s.id); }
@@ -1176,6 +1328,7 @@
       case "pg": S.pg = a; renderSheet(); break;
       case "pick": {
         if (!s) break;
+        if (s.kind === "metcon") { (s.items || (s.items = [])).push({ ex: a, reps: null, w: null }); S.sheet = false; saveSession(s.id); render(); break; }
         const last = lastTime(a, s);
         s.items.push({ ex: a, sets: Array.from({ length: last ? last.sets.length : 3 }, () => ({ w: null, r: null })) });
         S.sheet = false; saveSession(s.id); render();
@@ -1257,11 +1410,20 @@
     if (!s) return;
     if (t.id === "f-notes") { s.notes = t.value; saveSession(s.id); return; }
     if (t.id === "f-min") { const v = parseInt(t.value, 10); s.min = isNaN(v) ? null : v; saveSession(s.id); return; }
-    if (t.id === "r-dist" || t.id === "r-dur" || t.id === "r-hr") {
-      if (t.id === "r-dist") { const v = num(t.value); s.dist = v == null ? null : fromD(v); }
+    if (t.id === "r-dist" || t.id === "r-dur" || t.id === "r-hr" || t.id === "c-kcal") {
+      if (t.id === "r-dist") { const v = num(t.value); s.dist = v == null ? null : toKm(v, distUnit(s)); const c = document.getElementById("r-conv"); if (c) c.textContent = convText(s); }
       else if (t.id === "r-dur") s.dur = parseDur(t.value);
-      else { const v = parseInt(t.value, 10); s.hr = isNaN(v) ? null : v; }
-      document.getElementById("r-pace").innerHTML = paceHtml(s);
+      else { const v = parseInt(t.value, 10); s[t.id === "r-hr" ? "hr" : "kcal"] = isNaN(v) ? null : v; }
+      const pe = document.getElementById("r-pace"); if (pe) pe.innerHTML = paceHtml(s);
+      saveSession(s.id); return;
+    }
+    if (t.id === "m-desc") { s.desc = t.value; saveSession(s.id); return; }
+    if (t.id === "m-score") { s.score = t.value; saveSession(s.id); return; }
+    const mv = t.id.match(/^mv-([rw])-(\d+)$/);
+    if (mv) {
+      const it = s.items[+mv[2]];
+      if (mv[1] === "r") { const v = parseInt(t.value, 10); it.reps = isNaN(v) ? null : v; }
+      else { const v = num(t.value); it.w = v == null ? null : fromU(v); }
       saveSession(s.id); return;
     }
     if (t.id === "s-name") { s.name = t.value; saveSession(s.id); return; }
