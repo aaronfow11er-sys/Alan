@@ -95,7 +95,36 @@
   input[type="text"], input[type="search"], input[type="date"], input[inputmode] {
     background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%; min-width: 0;
   }
-  input::placeholder { color: var(--muted); opacity: .7; }
+  textarea { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%; min-width: 0; min-height: 96px; resize: vertical; line-height: 1.45; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .7; }
+
+  /* Effort, runs, journal */
+  .rpe { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+  .rpe button, .scale5 button { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; height: 40px; font-family: var(--mono); font-weight: 500; padding: 0; }
+  .rpe button[aria-pressed="true"] { background: var(--rpe-c, var(--ink)); border-color: transparent; color: var(--surface); font-weight: 600; }
+  .scale5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; max-width: 280px; }
+  .scale5 button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .rpe-desc { font-size: 13px; color: var(--muted); }
+  .badge { font-family: var(--mono); font-size: 12px; font-weight: 500; padding: 1px 7px; border-radius: 999px; color: var(--surface); background: var(--rpe-c, var(--muted)); white-space: nowrap; }
+  .run-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .run-grid label { font-size: 12.5px; color: var(--muted); }
+  .pace { font: 800 40px/1 var(--display); letter-spacing: .02em; }
+  .pace small { font: 500 14px var(--sans); color: var(--muted); }
+  .note-txt { font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .eff-list { display: grid; }
+  .eff-list > .eff { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: start; text-align: left; border: 0; border-top: 1px solid var(--line); background: transparent; padding: 9px 0; width: 100%; }
+  button.eff:hover { background: var(--surface-2); }
+  .eff .d { font: 700 16px/1.1 var(--display); text-transform: uppercase; display: grid; }
+  .eff .d small { font: 500 10.5px/1.2 var(--sans); color: var(--muted); letter-spacing: .06em; }
+  .eff .t { min-width: 0; display: grid; gap: 2px; }
+  .eff .t span { font-size: 13px; color: var(--muted); }
+  .ready { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px 12px; flex-wrap: wrap; }
+  .ready b { color: var(--ink); font-weight: 600; font-family: var(--mono); }
+  .rchart svg { width: 100%; height: auto; display: block; }
+  .rchart text { font: 10px var(--mono); fill: var(--muted); }
+  .rchart .grid { stroke: var(--line); stroke-width: 1; }
+  .day { display: grid; gap: 8px; }
 
   /* Log */
   .session-h { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr); gap: 8px; }
@@ -200,7 +229,7 @@
   .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
-  .tabs > div { max-width: 640px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+  .tabs > div { max-width: 640px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); }
   .tabs button { border: 0; background: transparent; padding: 10px 4px 12px; display: grid; justify-items: center; gap: 3px; font-size: 12px; font-weight: 600; color: var(--muted); }
   .tabs button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .tabs button[aria-current="page"] { color: var(--accent); }
@@ -314,8 +343,8 @@
 
   // ---------- State ----------
   const S = {
-    sessions: {}, custom: {}, prefs: { unit: "kg", weekStart: 1, bodyweight: null },
-    mode: "loading", tab: "log", currentId: null, reportWeek: null, metric: "sets", sel: null,
+    sessions: {}, custom: {}, days: {}, prefs: { unit: "kg", dist: "km", weekStart: 1, bodyweight: null },
+    mode: "loading", tab: "log", currentId: null, reportWeek: null, metric: "sets", sel: null, jDate: null,
     pq: "", pg: "All", cx: { n: "", p: [], s: [], bw: false },
   };
   const LS = {
@@ -348,6 +377,35 @@
   const fmtW = kg => (kg == null || kg === "" || isNaN(kg)) ? "" : String(Math.round(toU(kg) * 10) / 10);
   const fmtSets = v => fmtN(v, 1);
   const pct = (a, b) => b > 0 ? Math.round((a - b) / b * 100) : null;
+  const KM_MI = 1.609344;
+  const toD = km => S.prefs.dist === "mi" ? km / KM_MI : km;
+  const fromD = v => S.prefs.dist === "mi" ? v * KM_MI : v;
+  const fmtDist = km => fmtN(toD(km || 0), 1);
+  const fmtDur = sec => {
+    if (!sec) return "";
+    sec = Math.round(sec);
+    const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  };
+  const fmtHM = sec => { const m = Math.round((sec || 0) / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${pad(m % 60)}m` : `${m} min`; };
+  // "45" = minutes, "45:30" = m:ss, "1:05:30" = h:mm:ss
+  const parseDur = str => {
+    const p = String(str).trim().split(":").map(x => x.trim());
+    if (!p[0] || p.length > 3 || p.some(x => x === "" || isNaN(x))) return null;
+    const n = p.map(Number);
+    return n.length === 1 ? n[0] * 60 : n.length === 2 ? n[0] * 60 + n[1] : n[0] * 3600 + n[1] * 60 + n[2];
+  };
+  const fmtPace = (sec, km) => { if (!sec || !km) return "–"; const r = Math.round(sec / toD(km)); return `${Math.floor(r / 60)}:${pad(r % 60)}`; };
+  const minutesOf = s => s.kind === "run" ? (s.dur ? s.dur / 60 : null) : (s.min || null);
+  const RPE = { 1: "Barely working", 2: "Very easy", 3: "Easy", 4: "Comfortable", 5: "Moderate", 6: "Somewhat hard", 7: "Hard", 8: "Very hard", 9: "Near max", 10: "All-out" };
+  const rpeColor = n => n <= 4 ? "var(--good)" : n <= 6 ? "var(--accent)" : n <= 8 ? "var(--warn)" : "var(--bad)";
+  const badge = n => n ? `<span class="badge" style="--rpe-c:${rpeColor(n)}" title="Session RPE ${n}: ${RPE[n]}">RPE ${n}</span>` : "";
+  const hasDay = d => !!d && (!!(d.note || "").trim() || d.sleep != null || !!d.energy || !!d.soreness);
+  const readyLine = d => [
+    d.sleep != null ? `<span>Sleep <b>${fmtN(d.sleep, 1)}h</b></span>` : "",
+    d.energy ? `<span>Energy <b>${d.energy}/5</b></span>` : "",
+    d.soreness ? `<span>Soreness <b>${d.soreness}/5</b></span>` : "",
+  ].join("");
   const stable = v => JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(q => [q, x[q]])) : x);
 
   const exById = id => LIBMAP[id] || S.custom[id] || { id, n: "Deleted exercise", m: {}, bw: 0 };
@@ -378,7 +436,28 @@
         }
       }
     }
-    return { m, sets, ton, workouts: sessions.length };
+    return { m, sets, ton, workouts: sessions.filter(s => s.kind !== "run").length };
+  }
+  function runStats(sessions) {
+    const runs = sessions.filter(s => s.kind === "run" && s.dist > 0);
+    const dist = runs.reduce((a, r) => a + r.dist, 0);
+    const timed = runs.filter(r => r.dur > 0);
+    return {
+      n: runs.length, dist, dur: runs.reduce((a, r) => a + (r.dur || 0), 0),
+      longest: runs.reduce((a, r) => Math.max(a, r.dist), 0),
+      paceSec: timed.reduce((a, r) => a + r.dur, 0), paceKm: timed.reduce((a, r) => a + r.dist, 0),
+    };
+  }
+  // Session load = session RPE × minutes (Foster's sRPE method), summed for the week.
+  function effortStats(sessions) {
+    const rated = sessions.filter(s => s.rpe);
+    const load = rated.reduce((a, s) => a + (minutesOf(s) ? s.rpe * minutesOf(s) : 0), 0);
+    return { n: sessions.length, rated: rated.length, avg: rated.length ? rated.reduce((a, s) => a + s.rpe, 0) / rated.length : null, load: Math.round(load) };
+  }
+  function dayStats(ws) {
+    const ds = Object.values(S.days).filter(d => d.date >= ws && d.date < addDays(ws, 7));
+    const avg = k => { const v = ds.filter(d => d[k]).map(d => d[k]); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    return { energy: avg("energy"), soreness: avg("soreness"), sleep: avg("sleep") };
   }
   const inWeek = (list, ws) => { const we = addDays(ws, 7); return list.filter(s => s.date >= ws && s.date < we); };
   const weekStats = (list, ws) => statsFor(inWeek(list, ws));
@@ -412,7 +491,14 @@
           if (ex === "squat") sets.unshift({ w: 60, r: 5, wu: true });
           return { ex, sets };
         });
-        out.push({ id: `example-${w}-${name}`, date, name, items, createdAt: 0 });
+        const [rpe, min, note] = { Push: [7, 62, "Bench moved well. Left shoulder slightly tight on overhead press."], Pull: [7, 58, "Grip went before back on rows."], Legs: [8, 70, "Squats felt heavy. Hamstrings still sore from the long run."] }[name];
+        out.push({ id: `example-${w}-${name}`, date, name, items, createdAt: 0, rpe: rpe + (w === 0 && name === "Legs" ? 1 : 0), min, notes: w === 0 ? note : "" });
+      });
+      [[1, "Easy", 6, 345, 4], [5, "Long", 10 + step, 365, 6]].forEach(([day, runType, dist, pace, rpe]) => {
+        const date = addDays(ws, day);
+        if (date > today()) return;
+        out.push({ id: `example-${w}-run${day}`, kind: "run", date, runType, dist, dur: Math.round(dist * pace), rpe, createdAt: 0,
+          notes: w === 0 && runType === "Long" ? "Felt strong for the last 3 km. Calves tight afterwards." : "" });
       });
     }
     return out;
@@ -432,7 +518,7 @@
     t.textContent = msg; t.hidden = false;
     clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2600);
   }
-  function saveLocal() { LS.set("data", { sessions: S.sessions, custom: S.custom, prefs: S.prefs }); }
+  function saveLocal() { LS.set("data", { sessions: S.sessions, custom: S.custom, days: S.days, prefs: S.prefs }); }
 
   function clean(s) { const { id, ...rest } = s; return JSON.parse(JSON.stringify(rest)); }
   async function writeDoc(path, body) {
@@ -457,15 +543,16 @@
   }
   const saveSession = (id, delay) => queue("s:" + id, () => writeDoc("sessions/" + id, S.sessions[id] ? clean(S.sessions[id]) : null), delay);
   const savePrefs = () => queue("prefs", () => writeDoc("settings/prefs", { ...S.prefs }));
+  const saveDay = d => queue("d:" + d, () => writeDoc("days/" + d, hasDay(S.days[d]) ? clean(S.days[d]) : null));
   const saveCustom = id => queue("c:" + id, () => writeDoc("exercises/" + id, S.custom[id] ? clean(S.custom[id]) : null), 0);
 
   function afterRemote() {
     const a = document.activeElement;
-    if (a && a.closest && a.closest("#view, #sheet") && /INPUT|SELECT/.test(a.tagName)) { afterRemote.deferred = true; return; }
+    if (a && a.closest && a.closest("#view, #sheet") && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) { afterRemote.deferred = true; return; }
     render();
   }
   document.addEventListener("focusout", () => setTimeout(() => {
-    if (afterRemote.deferred && !(document.activeElement && /INPUT/.test(document.activeElement.tagName))) { afterRemote.deferred = false; render(); }
+    if (afterRemote.deferred && !(document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName))) { afterRemote.deferred = false; render(); }
   }, 0));
 
   async function init() {
@@ -473,14 +560,14 @@
     try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch { db = null; }
     if (!db) {
       const d = LS.get("data");
-      if (d) { S.sessions = { ...(d.sessions || {}), ...S.sessions }; S.custom = { ...(d.custom || {}), ...S.custom }; S.prefs = { ...S.prefs, ...(d.prefs || {}) }; }
+      if (d) { S.sessions = { ...(d.sessions || {}), ...S.sessions }; S.custom = { ...(d.custom || {}), ...S.custom }; S.days = { ...(d.days || {}), ...S.days }; S.prefs = { ...S.prefs, ...(d.prefs || {}) }; }
       S.mode = "local"; setStatus();
       if (pending.size) { saveLocal(); pending.clear(); }
       render(); return;
     }
     S.mode = "db"; setStatus();
-    let got = { s: false, c: false, p: false };
-    const ready = () => got.s && got.c && got.p;
+    let got = { s: false, c: false, p: false, d: false };
+    const ready = () => got.s && got.c && got.p && got.d;
     const onErr = e => { if (e && e.code === "revoked") { toast("This page lost access to your saved data."); } };
     db.collection("sessions").onSnapshot(snap => {
       const next = {};
@@ -500,6 +587,15 @@
       if (changed && ready()) afterRemote();
       else if (ready() && !afterRemote.booted) { afterRemote.booted = true; render(); }
     }, onErr);
+    db.collection("days").onSnapshot(snap => {
+      const next = {};
+      for (const d of snap.docs) next[d.id] = { ...d.data(), date: d.id };
+      for (const k of pending) if (k.startsWith("d:")) { const id = k.slice(2); if (S.days[id]) next[id] = S.days[id]; }
+      const changed = stable(next) !== stable(S.days);
+      S.days = next; got.d = true;
+      if (changed && ready()) afterRemote();
+      else if (ready() && !afterRemote.booted) { afterRemote.booted = true; render(); }
+    }, onErr);
     db.doc("settings/prefs").onSnapshot(snap => {
       if (!pending.has("prefs") && snap.exists) S.prefs = { ...S.prefs, ...snap.data() };
       got.p = true;
@@ -507,7 +603,7 @@
     }, onErr);
     // flush anything typed before the store connected
     for (const k of [...pending]) if (!timers[k]) {
-      if (k.startsWith("s:")) saveSession(k.slice(2), 0); else if (k === "prefs") savePrefs(); else if (k.startsWith("c:")) saveCustom(k.slice(2));
+      if (k.startsWith("s:")) saveSession(k.slice(2), 0); else if (k === "prefs") savePrefs(); else if (k.startsWith("c:")) saveCustom(k.slice(2)); else if (k.startsWith("d:")) saveDay(k.slice(2));
     }
   }
 
@@ -590,11 +686,12 @@
   const ICONS = {
     log: `<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>`,
     report: `<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>`,
+    journal: `<svg viewBox="0 0 24 24"><path d="M6 3.5h11.5a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6zM6 3.5v17M9.5 8.5h6M9.5 12.5h6"/></svg>`,
     history: `<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>`,
     settings: `<svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>`,
   };
   function renderTabs() {
-    document.getElementById("tabs").innerHTML = [["log", "Log"], ["report", "Report"], ["history", "History"], ["settings", "Settings"]]
+    document.getElementById("tabs").innerHTML = [["log", "Log"], ["report", "Report"], ["journal", "Journal"], ["history", "History"], ["settings", "Settings"]]
       .map(([k, n]) => `<button data-act="tab:${k}" ${S.tab === k ? `aria-current="page"` : ""}>${ICONS[k]}${n}</button>`).join("");
   }
 
@@ -605,14 +702,23 @@
     if (!s) {
       const recent = [];
       const seen = new Set();
-      for (const x of sessionList()) { const key = (x.name || "").toLowerCase() || x.id; if (seen.has(key)) continue; seen.add(key); recent.push(x); if (recent.length === 4) break; }
+      for (const x of sessionList()) { if (x.kind === "run") continue; const key = (x.name || "").toLowerCase() || x.id; if (seen.has(key)) continue; seen.add(key); recent.push(x); if (recent.length === 4) break; }
       const todays = sessionList().filter(x => x.date === today());
       return `
         <section class="card start">
           <div class="label">${esc(fmtDay(today(), { weekday: "long", month: "long", day: "numeric" }))}</div>
           <h2 class="h1">Ready to train?</h2>
-          <button class="btn primary wide" data-act="start">Start a workout</button>
-          ${todays.map(t => `<button class="btn wide" data-act="open:${t.id}">Continue ${esc(t.name || "today's workout")}</button>`).join("")}
+          <div class="row" style="display:grid;grid-template-columns:1fr 1fr">
+            <button class="btn primary" data-act="start">Start lifting</button>
+            <button class="btn primary" data-act="start-run">Log a run</button>
+          </div>
+          ${todays.map(t => `<button class="btn wide" data-act="open:${t.id}">Continue ${t.kind === "run" ? `today's run` : esc(t.name || "today's workout")}</button>`).join("")}
+        </section>
+        <section class="card">
+          <div class="row between"><h2 class="h2">Today's note</h2><button class="btn small" data-act="journal-today">${hasDay(S.days[today()]) ? "Edit" : "Add note"}</button></div>
+          ${hasDay(S.days[today()])
+            ? `<div class="ready">${readyLine(S.days[today()])}</div>${(S.days[today()].note || "").trim() ? `<p class="note-txt clamp">${esc(S.days[today()].note)}</p>` : ""}`
+            : `<p class="muted" style="font-size:13.5px">Log sleep, energy, soreness and anything else about today.</p>`}
         </section>
         ${recent.length ? `<section class="card">
           <h2 class="h2">Repeat a workout</h2>
@@ -621,6 +727,7 @@
         </section>` : ""}
         ${S.mode === "loading" ? `<p class="muted" style="text-align:center;font-size:13px">Loading your log…</p>` : ""}`;
     }
+    if (s.kind === "run") return viewRun(s);
     const st = statsFor([s]);
     const bwMissing = !S.prefs.bodyweight;
     return `
@@ -634,9 +741,47 @@
       </section>
       ${(s.items || []).map((it, i) => exCard(s, it, i, bwMissing)).join("")}
       <button class="btn primary wide" data-act="add-ex">+ Add exercise</button>
+      ${s.rpe || s.notes ? `<section class="card">
+        <div class="row between"><h2 class="h2">Session notes</h2><button class="btn small" data-act="finish">Edit</button></div>
+        <div class="row">${badge(s.rpe)}${s.rpe ? `<span class="muted" style="font-size:13px">${RPE[s.rpe]}</span>` : ""}${s.min ? `<span class="muted mono" style="font-size:13px">${s.min} min</span>` : ""}</div>
+        ${s.notes ? `<p class="note-txt">${esc(s.notes)}</p>` : ""}
+      </section>` : ""}
       <div class="row between">
         <button class="btn danger small" data-act="del-session" data-confirm="Tap again to delete">Delete workout</button>
-        <button class="btn small" data-act="done">Finish & see report</button>
+        <button class="btn small" data-act="finish">Finish workout</button>
+      </div>`;
+  }
+
+  function effortFields(s, withMin) {
+    const m = minutesOf(s);
+    return `<div class="field"><span class="label">How hard was the whole session? (RPE)</span>
+        <div class="rpe" role="group" aria-label="Session RPE">${Array.from({ length: 10 }, (_, i) => i + 1).map(n => `<button data-act="rpe:${n}" aria-pressed="${s.rpe === n}" style="--rpe-c:${rpeColor(n)}">${n}</button>`).join("")}</div>
+        <span class="rpe-desc">${s.rpe ? `<b>${s.rpe}</b> · ${RPE[s.rpe]}` : "1 = barely working, 10 = all-out effort."}</span>
+      </div>
+      ${withMin ? `<div class="field"><label for="f-min">Duration (minutes)</label><input id="f-min" inputmode="numeric" value="${s.min ?? ""}" placeholder="e.g. 60"></div>` : ""}
+      <div class="field"><label for="f-notes">Session notes</label><textarea id="f-notes" placeholder="How did it feel? Energy, pain or niggles, form cues, what to change next time.">${esc(s.notes || "")}</textarea></div>
+      ${s.rpe && m ? `<span class="muted" style="font-size:12.5px">Session load: <span class="mono">${Math.round(s.rpe * m)}</span> (RPE × minutes)</span>` : ""}`;
+  }
+
+  const RUN_TYPES = ["Easy", "Long", "Tempo", "Intervals", "Race", "Recovery"];
+  function paceHtml(s) { return `${fmtPace(s.dur, s.dist)}<small> /${S.prefs.dist}</small>`; }
+  function viewRun(s) {
+    const du = S.prefs.dist;
+    return `<section class="card">
+        <div class="row between"><span class="label">Run</span><button class="btn ghost small" data-act="done">Done</button></div>
+        <input type="date" id="s-date" value="${esc(s.date)}" aria-label="Run date">
+        <div class="chips-row" role="group" aria-label="Run type" style="flex-wrap:wrap">${RUN_TYPES.map(t => `<button data-act="rtype:${t}" aria-pressed="${s.runType === t}">${t}</button>`).join("")}</div>
+        <div class="run-grid">
+          <div class="field"><label for="r-dist">Distance (${du})</label><input id="r-dist" inputmode="decimal" value="${s.dist ? Math.round(toD(s.dist) * 100) / 100 : ""}" placeholder="8"></div>
+          <div class="field"><label for="r-dur">Time</label><input type="text" id="r-dur" value="${esc(fmtDur(s.dur))}" placeholder="45:30" autocomplete="off"></div>
+          <div class="field"><label for="r-hr">Avg HR</label><input id="r-hr" inputmode="numeric" value="${s.hr ?? ""}" placeholder="bpm"></div>
+        </div>
+        <div><span class="label">Avg pace</span><div class="pace num" id="r-pace">${paceHtml(s)}</div></div>
+      </section>
+      <section class="card"><h2 class="h2">How did it go?</h2>${effortFields(s, false)}</section>
+      <div class="row between">
+        <button class="btn danger small" data-act="del-session" data-confirm="Tap again to delete">Delete run</button>
+        <button class="btn primary" data-act="done">Save run & see report</button>
       </div>`;
   }
   function totHtml(st) {
@@ -687,8 +832,19 @@
     const dSets = pct(cur.sets, prev.sets), dTon = pct(cur.ton, prev.ton);
     const delta = d => d == null ? `<small>no data last week</small>` : `<small class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${d}% vs last week</small>`;
 
+    const wk = inWeek(src, ws), wkPrev = inWeek(src, addDays(ws, -7));
+    const rs = runStats(wk), rsPrev = runStats(wkPrev);
+    const runHist = [-5, -4, -3, -2, -1, 0].map(i => runStats(inWeek(src, addDays(ws, 7 * i))).dist);
+    const ef = effortStats(wk), efPrev = effortStats(wkPrev);
+    const dsx = example ? { energy: null, soreness: null, sleep: null } : dayStats(ws);
+    const du = S.prefs.dist;
+
     // alerts
     const alerts = [];
+    if (rsPrev.dist >= 5 && rs.dist > rsPrev.dist * 1.1) alerts.push(["warn", `<b>Running</b> distance is up ${pct(rs.dist, rsPrev.dist)}% (${fmtDist(rsPrev.dist)} → ${fmtDist(rs.dist)} ${du}). A common guide is to add no more than about 10% a week.`]);
+    if (efPrev.load > 0 && ef.load > efPrev.load * 1.3) alerts.push(["warn", `<b>Session load</b> (RPE × minutes) is up ${pct(ef.load, efPrev.load)}% on last week. Watch how you recover.`]);
+    if (ef.rated >= 3 && ef.avg >= 8.5) alerts.push(["bad", `<b>Average session RPE was ${fmtN(ef.avg, 1)}.</b> Most sessions were very hard. Add some easy days so you can recover.`]);
+    if (dsx.soreness >= 4) alerts.push(["warn", `Daily notes show soreness averaging ${fmtN(dsx.soreness, 1)}/5 this week. Consider a lighter few days.`]);
     if (cur.workouts) {
       for (const mm of MUSCLES) {
         const a = cur.m[mm.k]?.s || 0, b = prev.m[mm.k]?.s || 0;
@@ -699,8 +855,9 @@
       if (untrained.length) alerts.push(["", `Little or no direct work: ${untrained.join(", ")}.`]);
       const t = hist.slice(2).map(h => h.sets);
       if (t.length === 4 && t.every((v, i) => i === 0 || v > t[i - 1]) && t[0] > 0) alerts.push(["good", `Volume has climbed four weeks in a row. A lighter deload week soon will help you recover and keep progressing.`]);
-      if (!alerts.length) alerts.push(["good", "Balanced week. Every muscle got work and nothing spiked."]);
     }
+    if ((cur.workouts || rs.n) && !alerts.length) alerts.push(["good", "Balanced week. Every muscle got work and nothing spiked."]);
+    const effList = [...wk].sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || 0) - (b.createdAt || 0));
 
     const rows = GROUPS.map(g => {
       const ms = MUSCLES.filter(mm => mm.g === g);
@@ -753,7 +910,32 @@
         <div class="legend"><span class="zero">0</span><div class="bar"></div><span class="mono">${metric === "sets" ? "20+ sets" : fmtLoad(scale) + " " + S.prefs.unit}</span></div>
         <div class="readout" id="readout">${readout}</div>
       </section>
-      ${cur.workouts ? `<section class="card"><h2 class="h2">Notes on this week</h2><div class="alerts">${alerts.map(([k, t]) => `<div class="alert" data-k="${k}"><span>${t}</span></div>`).join("")}</div></section>` : `<section class="card"><p class="muted">No workouts logged this week.</p></section>`}
+      ${rs.n || rsPrev.n || runHist.some(Boolean) ? `<section class="card">
+        <div class="row between"><h2 class="h2">Running</h2><span class="row" style="gap:6px"><span class="label">6 wk</span>${spark(runHist)}</span></div>
+        <div class="kpis">
+          <div class="kpi"><span class="label">Distance</span><b class="num">${fmtDist(rs.dist)}</b><small>${du}${rsPrev.dist ? ` · ${pct(rs.dist, rsPrev.dist) >= 0 ? "+" : ""}${pct(rs.dist, rsPrev.dist)}%` : ""}</small></div>
+          <div class="kpi"><span class="label">Time</span><b class="num">${fmtHM(rs.dur)}</b><small>${rs.n} run${rs.n === 1 ? "" : "s"}</small></div>
+          <div class="kpi"><span class="label">Avg pace</span><b class="num">${fmtPace(rs.paceSec, rs.paceKm)}</b><small>/${du} · longest ${fmtDist(rs.longest)}</small></div>
+        </div>
+      </section>` : ""}
+      <section class="card">
+        <h2 class="h2">Effort & notes</h2>
+        <div class="kpis">
+          <div class="kpi"><span class="label">Avg RPE</span><b class="num">${ef.avg ? fmtN(ef.avg, 1) : "–"}</b><small>${ef.rated} of ${ef.n} rated</small></div>
+          <div class="kpi"><span class="label">Session load</span><b class="num">${fmtN(ef.load)}</b>${efPrev.load ? delta(pct(ef.load, efPrev.load)) : `<small>RPE × minutes</small>`}</div>
+          <div class="kpi"><span class="label">Energy</span><b class="num">${dsx.energy ? fmtN(dsx.energy, 1) : "–"}</b><small>${dsx.soreness ? `soreness ${fmtN(dsx.soreness, 1)}/5` : "from daily notes"}</small></div>
+        </div>
+        ${effList.length ? `<div class="eff-list">${effList.map(s => {
+          const tag = example ? "div" : "button";
+          const title = s.kind === "run" ? `Run${s.runType ? " · " + s.runType : ""} · ${fmtDist(s.dist)} ${du}` : esc(s.name || "Workout");
+          return `<${tag} class="eff" ${example ? "" : `data-act="open:${s.id}"`}>
+            <span class="d">${esc(fmtDay(s.date, { day: "numeric" }))}<small>${esc(fmtDay(s.date, { weekday: "short" }))}</small></span>
+            <span class="t"><b>${title}</b>${s.notes ? `<span class="clamp">${esc(s.notes)}</span>` : s.rpe ? "" : `<span>Not rated yet</span>`}</span>
+            ${badge(s.rpe)}
+          </${tag}>`;
+        }).join("")}</div>` : ""}
+      </section>
+      ${cur.workouts || rs.n ? `<section class="card"><h2 class="h2">Notes on this week</h2><div class="alerts">${alerts.map(([k, t]) => `<div class="alert" data-k="${k}"><span>${t}</span></div>`).join("")}</div></section>` : `<section class="card"><p class="muted">No workouts logged this week.</p></section>`}
       <section class="card">
         <div class="row between"><h2 class="h2">By body part</h2><button class="btn small" data-act="copy-report">Copy as text</button></div>
         <div class="mt">
@@ -770,7 +952,11 @@
     const real = sessionList(); const src = real.length ? real : exampleSessions();
     const ws = S.reportWeek || weekStart(today());
     const cur = weekStats(src, ws), u = S.prefs.unit;
-    const lines = [`Load Ledger: week of ${weekLabel(ws)}`, `${cur.workouts} workouts · ${cur.sets} hard sets · ${fmtLoad(cur.ton)} ${u}`, ""];
+    const wk = inWeek(src, ws), rs = runStats(wk), ef = effortStats(wk);
+    const lines = [`Load Ledger: week of ${weekLabel(ws)}`, `${cur.workouts} workouts · ${cur.sets} hard sets · ${fmtLoad(cur.ton)} ${u}`];
+    if (rs.n) lines.push(`Running: ${rs.n} runs · ${fmtDist(rs.dist)} ${S.prefs.dist} · ${fmtHM(rs.dur)}`);
+    if (ef.rated) lines.push(`Avg session RPE ${fmtN(ef.avg, 1)} · session load ${fmtN(ef.load)}`);
+    lines.push("");
     for (const g of GROUPS) {
       const ms = MUSCLES.filter(m => m.g === g);
       lines.push(g.toUpperCase());
@@ -787,13 +973,15 @@
     return Object.entries(weeks).sort((a, b) => b[0].localeCompare(a[0])).map(([ws, ss]) => {
       const st = statsFor(ss);
       return `<section class="wk">
-        <div class="wk-h"><h2 class="h2">${esc(weekLabel(ws))}</h2><button class="btn ghost small" data-act="goto-week:${ws}">${ss.length} workout${ss.length > 1 ? "s" : ""} · ${st.sets} sets · Report ›</button></div>
+        <div class="wk-h"><h2 class="h2">${esc(weekLabel(ws))}</h2><button class="btn ghost small" data-act="goto-week:${ws}">${ss.length} session${ss.length > 1 ? "s" : ""} · ${st.sets} sets · Report ›</button></div>
         ${ss.map(s => {
-          const x = statsFor([s]);
+          const run = s.kind === "run", x = statsFor([s]), du = S.prefs.dist;
           return `<button class="sess" data-act="open:${s.id}">
             <span class="d">${esc(fmtDay(s.date, { day: "numeric" }))}<small>${esc(fmtDay(s.date, { weekday: "short", month: "short" }))}</small></span>
-            <span class="t"><b>${esc(s.name || "Workout")}</b><div>${esc((s.items || []).map(i => exById(i.ex).n).join(", ") || "No exercises")}</div></span>
-            <span class="mono muted" style="font-size:12.5px;text-align:right">${x.sets} sets<br>${fmtLoad(x.ton)} ${S.prefs.unit}</span>
+            <span class="t"><span class="row" style="gap:8px"><b>${run ? `Run${s.runType ? " · " + esc(s.runType) : ""}` : esc(s.name || "Workout")}</b>${badge(s.rpe)}</span>
+              <div>${run ? `${fmtDur(s.dur) || "No time"} · ${fmtPace(s.dur, s.dist)} /${du}` : esc((s.items || []).map(i => exById(i.ex).n).join(", ") || "No exercises")}</div>
+              ${s.notes ? `<div>${esc(s.notes)}</div>` : ""}</span>
+            <span class="mono muted" style="font-size:12.5px;text-align:right">${run ? `${fmtDist(s.dist)} ${du}` : `${x.sets} sets<br>${fmtLoad(x.ton)} ${S.prefs.unit}`}</span>
           </button>`;
         }).join("")}
       </section>`;
@@ -808,6 +996,7 @@
       <section class="card">
         <h2 class="h2">Units & week</h2>
         <div class="row between"><span>Weight unit</span><div class="seg"><button data-act="unit:kg" aria-pressed="${S.prefs.unit === "kg"}">kg</button><button data-act="unit:lb" aria-pressed="${S.prefs.unit === "lb"}">lb</button></div></div>
+        <div class="row between"><span>Distance unit</span><div class="seg"><button data-act="dist:km" aria-pressed="${S.prefs.dist !== "mi"}">km</button><button data-act="dist:mi" aria-pressed="${S.prefs.dist === "mi"}">mi</button></div></div>
         <div class="row between"><span>Week starts on</span><div class="seg"><button data-act="ws:1" aria-pressed="${S.prefs.weekStart === 1}">Monday</button><button data-act="ws:0" aria-pressed="${S.prefs.weekStart === 0}">Sunday</button></div></div>
         <div class="field">
           <label for="bw">Bodyweight (${S.prefs.unit})</label>
@@ -830,10 +1019,66 @@
       </section>`;
   }
 
+  function rpeChart(list) {
+    const W = 320, H = 140, l = 24, r = 6, t = 10, b = 22, ih = H - t - b, step = (W - l - r) / list.length, bw = Math.min(18, step * .62);
+    const y = v => t + ih * (1 - v / 10);
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Session RPE for the last ${list.length} rated sessions">
+      ${[0, 5, 10].map(v => `<line class="grid" x1="${l}" x2="${W - r}" y1="${y(v)}" y2="${y(v)}"/><text x="${l - 6}" y="${y(v) + 3.5}" text-anchor="end">${v}</text>`).join("")}
+      ${list.map((s, i) => {
+        const x = l + step * i + (step - bw) / 2;
+        return `<rect x="${x.toFixed(1)}" y="${y(s.rpe).toFixed(1)}" width="${bw.toFixed(1)}" height="${(ih * s.rpe / 10).toFixed(1)}" rx="2" style="fill:${rpeColor(s.rpe)}"><title>${esc(fmtDay(s.date, { month: "short", day: "numeric" }))} · ${s.kind === "run" ? "Run" : esc(s.name || "Workout")} · RPE ${s.rpe}</title></rect>
+          <text x="${(x + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${parseD(s.date).getDate()}</text>`;
+      }).join("")}
+    </svg>`;
+  }
+
+  function viewJournal() {
+    const d = S.jDate || today();
+    const dn = S.days[d] || {};
+    const scale = (key, label, lo, hi) => `<div class="field"><span>${label} <span class="muted" style="font-size:12.5px">1 ${lo} · 5 ${hi}</span></span>
+      <div class="scale5" role="group" aria-label="${label}">${[1, 2, 3, 4, 5].map(n => `<button data-act="day:${key}:${n}" aria-pressed="${dn[key] === n}">${n}</button>`).join("")}</div></div>`;
+    const rated = sessionList().filter(s => s.rpe).slice(0, 14).reverse();
+    const dates = [...new Set([...Object.keys(S.days).filter(k => hasDay(S.days[k])), ...sessionList().map(s => s.date)])].sort().reverse().slice(0, 21);
+    return `
+      <section class="card">
+        <div class="row between"><h2 class="h2">Daily note</h2><input type="date" id="j-date" value="${esc(d)}" aria-label="Note date" style="width:auto"></div>
+        <div class="field" style="max-width:160px"><label for="j-sleep">Sleep (hours)</label><input id="j-sleep" inputmode="decimal" value="${dn.sleep ?? ""}" placeholder="7.5"></div>
+        ${scale("energy", "Energy", "drained", "great")}
+        ${scale("soreness", "Soreness", "none", "very sore")}
+        <div class="field"><label for="j-note">Notes</label><textarea id="j-note" placeholder="How's your body today? Stress, aches, food, anything worth remembering.">${esc(dn.note || "")}</textarea></div>
+        <span class="muted" style="font-size:12.5px">Saves as you type.</span>
+      </section>
+      <section class="card rchart">
+        <h2 class="h2">Session RPE</h2>
+        ${rated.length ? rpeChart(rated) + `<p class="foot">Last ${rated.length} rated sessions, by day of the month. Green is easy, red is near max. A healthy week mixes easy and hard days.</p>` : `<p class="muted" style="font-size:13.5px">Rate a session when you finish it and your effort trend shows here.</p>`}
+      </section>
+      ${dates.length ? dates.map(date => {
+        const day = S.days[date];
+        const ss = sessionList().filter(s => s.date === date).reverse();
+        return `<section class="day">
+          <div class="row between"><h2 class="h2">${esc(fmtDay(date, { weekday: "short", month: "short", day: "numeric" }))}</h2>${hasDay(day) ? `<button class="btn ghost small" data-act="jdate:${date}">Edit note</button>` : ""}</div>
+          ${hasDay(day) ? `<div class="card"><div class="ready">${readyLine(day)}</div>${(day.note || "").trim() ? `<p class="note-txt">${esc(day.note)}</p>` : ""}</div>` : ""}
+          ${ss.map(s => `<button class="sess" data-act="open:${s.id}" style="grid-template-columns:minmax(0,1fr) auto">
+            <span class="t"><b>${s.kind === "run" ? `Run${s.runType ? " · " + esc(s.runType) : ""} · ${fmtDist(s.dist)} ${S.prefs.dist}` : esc(s.name || "Workout")}</b>
+              <div style="white-space:normal">${s.notes ? esc(s.notes) : s.rpe ? RPE[s.rpe] : "No notes or rating yet. Tap to add."}</div></span>
+            ${badge(s.rpe)}
+          </button>`).join("")}
+        </section>`;
+      }).join("") : ""}`;
+  }
+
   function renderSheet() {
     const el = document.getElementById("sheet");
-    if (!S.sheet) { el.hidden = true; el.innerHTML = ""; return; }
+    const fs = S.sheet === "finish" ? cur() : null;
+    if (!S.sheet || (S.sheet === "finish" && !fs)) { el.hidden = true; el.innerHTML = ""; return; }
     el.hidden = false;
+    if (fs) {
+      el.innerHTML = `<div class="sheet-p" role="dialog" aria-modal="true" aria-label="Session complete" style="grid-template-rows:auto 1fr">
+        <div class="row between"><h2 class="h2">Session complete</h2><button class="btn small" data-act="close-sheet">Close</button></div>
+        <div class="scroll">${effortFields(fs, true)}<button class="btn primary wide" data-act="finish-save">Save & see report</button></div>
+      </div>`;
+      return;
+    }
     el.innerHTML = `<div class="sheet-p" role="dialog" aria-modal="true" aria-label="Add exercise">
       <div class="row between"><h2 class="h2">Add exercise</h2><button class="btn small" data-act="close-sheet">Close</button></div>
       <input type="search" id="pq" placeholder="Search exercises" value="${esc(S.pq)}" autocomplete="off">
@@ -863,7 +1108,7 @@
     renderTabs();
     setStatus();
     const v = document.getElementById("view");
-    v.innerHTML = S.tab === "log" ? viewLog() : S.tab === "report" ? viewReport() : S.tab === "history" ? viewHistory() : viewSettings();
+    v.innerHTML = S.tab === "log" ? viewLog() : S.tab === "report" ? viewReport() : S.tab === "journal" ? viewJournal() : S.tab === "history" ? viewHistory() : viewSettings();
     renderSheet();
   }
 
@@ -879,9 +1124,11 @@
   }
   function setTab(t) { S.tab = t; LS.set("tab", t); render(); window.scrollTo(0, 0); }
   function setCurrent(id) { S.currentId = id; LS.set("current", id); }
-  function newSession(items, name) {
+  function newSession(items, name, kind) {
     const id = uid("s");
-    S.sessions[id] = { id, date: today(), name: name || "", items: items || [], createdAt: Date.now() };
+    S.sessions[id] = kind === "run"
+      ? { id, kind: "run", date: today(), runType: "Easy", dist: null, dur: null, createdAt: Date.now() }
+      : { id, date: today(), name: name || "", items: items || [], createdAt: Date.now() };
     setCurrent(id); saveSession(id, 0);
     return id;
   }
@@ -895,6 +1142,25 @@
     switch (act) {
       case "tab": setTab(a); break;
       case "start": newSession(); setTab("log"); break;
+      case "start-run": newSession(null, "", "run"); setTab("log"); break;
+      case "rtype": if (s) { s.runType = a; saveSession(s.id); render(); } break;
+      case "rpe": if (s) { s.rpe = s.rpe === +a ? null : +a; if (!s.rpe) delete s.rpe; saveSession(s.id); render(); } break;
+      case "finish": {
+        if (!s) break;
+        if (s.min == null && s.date === today() && s.createdAt) {
+          const mins = Math.round((Date.now() - s.createdAt) / 60000);
+          if (mins >= 10 && mins <= 240) { s.min = mins; saveSession(s.id); }
+        }
+        S.sheet = "finish"; renderSheet(); break;
+      }
+      case "finish-save": S.sheet = false; setCurrent(null); S.reportWeek = s ? weekStart(s.date) : null; setTab("report"); break;
+      case "journal-today": S.jDate = today(); setTab("journal"); break;
+      case "jdate": S.jDate = a; render(); window.scrollTo(0, 0); break;
+      case "day": {
+        const d = S.jDate || today(); const dn = S.days[d] || (S.days[d] = { date: d });
+        dn[a] = dn[a] === +b ? null : +b; saveDay(d); render(); break;
+      }
+      case "dist": S.prefs.dist = a; savePrefs(); render(); break;
       case "repeat": {
         const src = S.sessions[a];
         newSession((src.items || []).map(it => ({ ex: it.ex, sets: it.sets.filter(counts).map(() => ({ w: null, r: null })).concat(it.sets.some(counts) ? [] : [{ w: null, r: null }]) })), src.name);
@@ -982,7 +1248,22 @@
     if (t.id === "pq") { S.pq = t.value; document.getElementById("plist").innerHTML = pickList(); return; }
     if (t.id === "bw") { const v = num(t.value); S.prefs.bodyweight = v == null ? null : fromU(v); savePrefs(); return; }
     if (t.id === "cx-n") { S.cx.n = t.value; return; }
+    if (t.id === "j-date") { if (t.value) { S.jDate = t.value; render(); } return; }
+    if (t.id === "j-note" || t.id === "j-sleep") {
+      const d = S.jDate || today(); const dn = S.days[d] || (S.days[d] = { date: d });
+      if (t.id === "j-note") dn.note = t.value; else dn.sleep = num(t.value);
+      saveDay(d); return;
+    }
     if (!s) return;
+    if (t.id === "f-notes") { s.notes = t.value; saveSession(s.id); return; }
+    if (t.id === "f-min") { const v = parseInt(t.value, 10); s.min = isNaN(v) ? null : v; saveSession(s.id); return; }
+    if (t.id === "r-dist" || t.id === "r-dur" || t.id === "r-hr") {
+      if (t.id === "r-dist") { const v = num(t.value); s.dist = v == null ? null : fromD(v); }
+      else if (t.id === "r-dur") s.dur = parseDur(t.value);
+      else { const v = parseInt(t.value, 10); s.hr = isNaN(v) ? null : v; }
+      document.getElementById("r-pace").innerHTML = paceHtml(s);
+      saveSession(s.id); return;
+    }
     if (t.id === "s-name") { s.name = t.value; saveSession(s.id); return; }
     if (t.id === "s-date") { if (t.value) { s.date = t.value; saveSession(s.id); } return; }
     const m = t.id.match(/^([wr])-(\d+)-(\d+)$/);
