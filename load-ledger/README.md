@@ -7,6 +7,7 @@ A phone-first training log for lifting, running, metcons and other cardio. It tu
   - **Metcon**: name, format (for time, AMRAP, EMOM, intervals, chipper), workout description, time or time cap, score, Rx or scaled, HR and calories. Optional movements with total reps and weight count their load toward the body-part report (load only, not hard sets).
   - **Other cardio**: bike, row, SkiErg, swim, walk, elliptical, stairs, with distance, time, calories and HR. Pace shows per 500 m for rowing and SkiErg, per 100 m for swimming and as km/h for the bike.
   - **Distances**: enter them in km, mi or m. Everything converts to km automatically, and reports always use km.
+- **Log from a photo**: take or choose a photo of a whiteboard, notebook page, or a watch or app screenshot. Claude reads it and builds the sessions (lifting, runs, metcons, cardio), converting lb and miles to your units. You review and untick anything wrong before it's added. Exercises it doesn't recognise are added as your own exercises, with the muscles they work.
 - **After each session**: rate the whole session's RPE (1–10), add the duration and write notes. RPE × minutes gives a session load figure.
 - **Lifting**: start or repeat a workout, add exercises, and enter weight × reps. Last time's numbers show as hints, and "Use these" copies them in. Tap **W** to mark a warm-up set so it doesn't count.
 - **Report**: pick a week to see workouts, hard sets and total load compared with the week before. It includes:

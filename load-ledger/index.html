@@ -258,7 +258,19 @@
     .spark { width: 40px; }
     .kpi b { font-size: 24px; }
   }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  /* Photo import */
+  .photo-card { border-style: dashed; }
+  .photo-card .row > .btn { flex: 1; }
+  .thumbs { display: flex; gap: 8px; overflow-x: auto; }
+  .thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); flex: none; }
+  .reading { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+  .spin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent); animation: spin .9s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .imp { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .imp input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); }
+  .imp .t { display: grid; gap: 3px; min-width: 0; }
+  .imp .t div { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } .spin { animation-duration: 3s; } }
 </style>
 
 <div class="wrap top">
@@ -269,6 +281,7 @@
 <nav class="tabs" aria-label="Sections"><div id="tabs"></div></nav>
 <div class="sheet" id="sheet" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
+<input type="file" id="photo-in" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden>
 
 <script>
 (() => {
@@ -440,7 +453,7 @@
   ].join("");
   const stable = v => JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(q => [q, x[q]])) : x);
 
-  const exById = id => LIBMAP[id] || S.custom[id] || { id, n: "Deleted exercise", m: {}, bw: 0 };
+  const exById = id => LIBMAP[id] || S.custom[id] || (S.photo && S.photo.customs[id]) || { id, n: "Deleted exercise", m: {}, bw: 0 };
   const allEx = () => [...LIB, ...Object.values(S.custom)];
   const exGroup = ex => { const top = Object.entries(ex.m).sort((a, b) => b[1] - a[1])[0]; return top ? MN[top[0]].g : "Other"; };
   const exMuscleText = ex => {
@@ -612,7 +625,181 @@
     if (afterRemote.deferred && !(document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName))) { afterRemote.deferred = false; render(); }
   }, 0));
 
+  // ---------- Photo import (Claude reads a photo of a session) ----------
+  let sampleFn = null, imgLimits = null, photoCtl = null;
+  async function initSample() {
+    try { sampleFn = window.claude && window.claude.use ? await window.claude.use("sample") : null; } catch { sampleFn = null; }
+    if (!sampleFn) return;
+    const lim = await sampleFn.limits().catch(() => null);
+    imgLimits = lim && lim.images ? lim.images : null;
+    if (imgLimits) { document.getElementById("photo-in").accept = imgLimits.mediaTypes.join(","); if (S.tab === "log" && !cur()) render(); }
+  }
+
+  function photoPrompt() {
+    const exList = allEx().map(e => `${e.id}: ${e.n}`).join("\n");
+    return `You are reading a photo (or photos) of someone's training: a whiteboard, notebook page, gym app or watch screenshot. Extract every training session it shows so it can be added to their log.
+
+Today is ${today()} (${fmtDay(today(), { weekday: "long" })}). If no date is visible, use today. If only a weekday is shown, use the most recent such date on or before today.
+They normally use ${S.prefs.unit} for weights and ${S.prefs.dist === "mi" ? "miles" : "km"} for distance. Use the units written in the photo when present.
+
+Session kinds:
+- "lift": strength work as sets of weight x reps.
+- "run": a run.
+- "metcon": a conditioning workout (WOD, AMRAP, EMOM, for time, chipper, intervals).
+- "cardio": other cardio on one machine or activity; "mode" is one of ${CARDIO_MODES.join(", ")}.
+
+Known exercises (id: name):
+${exList}
+
+Match each exercise or movement to one of these ids when it is the same movement. If none fits, set "exercise_id" to null, give its "name", and list the muscles it works in "primary" and "helpers" using only these keys: ${MUSCLES.map(m => m.k).join(", ")}.
+
+Expand shorthand: "3x8 @ 80" is three sets of 8 reps at 80; "80x8, 85x6" are two sets. Mark sets labelled as warm-ups. Bodyweight movements have weight 0 unless extra weight is written. For metcon movements give total reps across all rounds when the structure makes it clear (21-15-9 thrusters = 45).
+
+Reply with only JSON of this shape (include only the fields that apply to each kind):
+{"sessions":[{
+ "kind":"lift|run|metcon|cardio",
+ "date":"YYYY-MM-DD",
+ "name":"string or null",
+ "weight_unit":"kg|lb",
+ "exercises":[{"exercise_id":"bench","name":"Bench Press","primary":[],"helpers":[],"sets":[{"weight":80,"reps":8,"warmup":false}]}],
+ "run_type":"${RUN_TYPES.join("|")}",
+ "mode":"Row",
+ "distance":5,"distance_unit":"km|mi|m",
+ "time":"h:mm:ss or m:ss",
+ "format":"${MET_FORMATS.join("|")}",
+ "description":"the workout as written",
+ "score":"string",
+ "rx":true,
+ "movements":[{"exercise_id":"thruster","name":"Thruster","primary":[],"helpers":[],"total_reps":45,"weight":43}],
+ "avg_hr":null,"calories":null,"rpe":null,
+ "notes":"anything else written, such as how it felt"
+}],"problem":null}
+Use null for anything not shown and never invent numbers that are not in the photo. "rpe" is a 1-10 effort rating only if one is written. If the photo shows no training, return {"sessions":[],"problem":"one short sentence on what the photo shows instead"}.`;
+  }
+
+  function resolveEx(e, customs) {
+    if (e && e.exercise_id && (LIBMAP[e.exercise_id] || S.custom[e.exercise_id])) return e.exercise_id;
+    const name = String((e && e.name) || "").trim().slice(0, 60);
+    if (!name) return null;
+    const hit = [...allEx(), ...Object.values(customs)].find(x => x.n.toLowerCase() === name.toLowerCase());
+    if (hit) return hit.id;
+    const m = {};
+    (Array.isArray(e.primary) ? e.primary : []).forEach(k => { if (MN[k]) m[k] = 1; });
+    (Array.isArray(e.helpers) ? e.helpers : []).forEach(k => { if (MN[k] && !m[k]) m[k] = .5; });
+    const id = uid("c");
+    customs[id] = { id, n: name, m, bw: 0 };
+    return id;
+  }
+
+  function importSession(p, customs) {
+    const numOr = v => (v === null || v === undefined || v === "" || isNaN(+v)) ? null : +v;
+    const int = v => { const n = numOr(v); return n == null ? null : Math.round(n); };
+    const wu = p.weight_unit === "lb" ? "lb" : p.weight_unit === "kg" ? "kg" : S.prefs.unit;
+    const kg = v => { const n = numOr(v); return n == null ? null : wu === "lb" ? n * KG_LB : n; };
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(p.date || "") ? p.date : today();
+    const sess = { id: uid("s"), date, createdAt: Date.now(), source: "photo", _wu: wu };
+    const rpe = int(p.rpe); if (rpe >= 1 && rpe <= 10) sess.rpe = rpe;
+    if (typeof p.notes === "string" && p.notes.trim()) sess.notes = p.notes.trim();
+    const hr = int(p.avg_hr), kcal = int(p.calories);
+    const dur = p.time != null ? parseDur(String(p.time)) : null;
+    const dist = numOr(p.distance);
+    const du = ["km", "mi", "m"].includes(p.distance_unit) ? p.distance_unit : (S.prefs.dist === "mi" ? "mi" : "km");
+    if (p.kind === "run" || p.kind === "cardio") {
+      Object.assign(sess, { kind: p.kind, dist: dist == null ? null : toKm(dist, du), dur, du });
+      if (p.kind === "run") sess.runType = RUN_TYPES.includes(p.run_type) ? p.run_type : "Easy";
+      else sess.mode = CARDIO_MODES.includes(p.mode) ? p.mode : "Other";
+    } else if (p.kind === "metcon") {
+      Object.assign(sess, {
+        kind: "metcon", name: String(p.name || "").slice(0, 60), format: MET_FORMATS.includes(p.format) ? p.format : "Other",
+        desc: String(p.description || ""), score: p.score == null ? "" : String(p.score), rx: p.rx !== false, dur,
+        items: (Array.isArray(p.movements) ? p.movements : []).map(mv => ({ ex: resolveEx(mv, customs), reps: int(mv.total_reps), w: kg(mv.weight) })).filter(it => it.ex),
+      });
+    } else {
+      sess.name = String(p.name || "").slice(0, 60);
+      sess.items = (Array.isArray(p.exercises) ? p.exercises : []).map(ex => ({
+        ex: resolveEx(ex, customs),
+        sets: (Array.isArray(ex.sets) ? ex.sets : []).map(st => { const o = { w: kg(st.weight), r: int(st.reps) }; if (st.warmup) o.wu = true; return o; }),
+      })).filter(it => it.ex && it.sets.length);
+    }
+    if (hr) sess.hr = hr;
+    if (kcal) sess.kcal = kcal;
+    return sess;
+  }
+
+  async function readPhoto(files) {
+    if (!files.length) return;
+    if (!sampleFn || !imgLimits) { toast("Reading photos isn't available here. Open the page on claude.ai."); return; }
+    files = files.slice(0, imgLimits.maxCount);
+    if (files.some(f => f.size > imgLimits.maxInputBytes)) { toast(`That photo is too large. Use one under ${Math.round(imgLimits.maxInputBytes / 1e6)} MB.`); return; }
+    if (S.photo) S.photo.thumbs.forEach(u => URL.revokeObjectURL(u));
+    S.photo = { state: "reading", thumbs: files.map(f => URL.createObjectURL(f)), sessions: [], keep: [], customs: {}, msg: "" };
+    S.sheet = "photo"; renderSheet();
+    photoCtl = new AbortController();
+    const ph = S.photo;
+    try {
+      const res = await sampleFn.json(photoPrompt(), { images: files, signal: photoCtl.signal });
+      if (S.photo !== ph) return;
+      const list = res && Array.isArray(res.sessions) ? res.sessions : [];
+      ph.sessions = list.map(x => importSession(x || {}, ph.customs)).filter(x => x.kind || x.items.length);
+      ph.keep = ph.sessions.map(() => true);
+      if (ph.sessions.length) ph.state = "review";
+      else { ph.state = "error"; ph.msg = (res && res.problem) ? `No training found. ${res.problem}` : "No training found in that photo. Try a clearer, closer shot."; }
+    } catch (e) {
+      if (S.photo !== ph) return;
+      const code = e && e.code;
+      if (code === "cancelled") { S.sheet = false; S.photo = null; renderSheet(); return; }
+      ph.state = "error";
+      ph.msg = code === "not_granted" || code === "sampling_disabled" || code === "images_unavailable" || code === "not_declared"
+        ? "This page isn't allowed to send photos to Claude. Allow it from the page's permissions to use this."
+        : code === "image_rejected" ? "That photo couldn't be read. Try a JPEG or PNG."
+        : code === "rate_limited" ? "Too many requests right now. Try again in a few minutes."
+        : code === "session_expired" ? "Sign in to claude.ai again, then try once more."
+        : code === "invalid_json" || code === "empty_completion" || code === "refused" ? "Couldn't make sense of that photo. Try a clearer shot, or log it by hand."
+        : "Something went wrong reading the photo. Try again.";
+      if (code === "not_granted" || code === "sampling_disabled" || code === "images_unavailable" || code === "not_declared") imgLimits = null;
+    }
+    renderSheet();
+  }
+
+  // Shown in the photo's own weight unit so it is easy to check against the picture.
+  function photoDetail(s) {
+    const u = s._wu || S.prefs.unit;
+    const w = kg => kg == null ? "0" : String(Math.round((u === "lb" ? kg / KG_LB : kg) * 10) / 10);
+    const conv = u !== S.prefs.unit && (s.items || []).some(it => it.w || (it.sets || []).some(x => x.w)) ? [`Read in ${u}; your log shows ${S.prefs.unit}.`] : [];
+    if (isLift(s)) return (s.items || []).map(it => `${exById(it.ex).n}: ${it.sets.map(x => `${w(x.w)}×${x.r ?? "?"}${x.wu ? " (warm-up)" : ""}`).join(", ")} ${u}`).concat(conv);
+    if (s.kind === "metcon") return [sessSub(s), s.desc, (s.items || []).map(it => `${exById(it.ex).n} ${it.reps ?? "?"} reps${it.w ? ` @ ${w(it.w)} ${u}` : ""}`).join(", ")].filter(Boolean).concat(conv);
+    return [sessSub(s)];
+  }
+
+  function photoSheet() {
+    const ph = S.photo;
+    const body = ph.state === "reading"
+      ? `<div class="reading"><span class="spin" aria-hidden="true"></span><span>Reading your photo… this can take up to a minute.</span></div>
+         <button class="btn" data-act="photo-stop">Stop</button>`
+      : ph.state === "error"
+      ? `<p class="hint" style="font-size:14px">${esc(ph.msg)}</p>${imgLimits ? `<button class="btn primary" data-act="photo-pick">Try another photo</button>` : ""}`
+      : `<p class="muted" style="font-size:13.5px">Check what Claude read, untick anything wrong, then add it. You can edit everything afterwards.</p>
+         ${ph.sessions.map((s, i) => `<label class="imp"><input type="checkbox" id="imp-${i}" ${ph.keep[i] ? "checked" : ""}>
+           <span class="t"><span class="row" style="gap:8px"><b>${esc(sessTitle(s))}</b>${badge(s.rpe)}</span>
+             <div>${esc(fmtDay(s.date, { weekday: "short", month: "short", day: "numeric" }))}</div>
+             ${photoDetail(s).map(l => `<div>${esc(l)}</div>`).join("")}
+             ${s.notes ? `<div>“${esc(s.notes)}”</div>` : ""}</span></label>`).join("")}
+         ${Object.values(ph.customs).length ? `<p class="foot">New exercises that will be added: ${esc(Object.values(ph.customs).map(c => c.n).join(", "))}.</p>` : ""}
+         <button class="btn primary wide" data-act="photo-add">Add ${ph.keep.filter(Boolean).length} to log</button>`;
+    return `<div class="sheet-p" role="dialog" aria-modal="true" aria-label="Log from a photo" style="grid-template-rows:auto 1fr">
+      <div class="row between"><h2 class="h2">From your photo</h2><button class="btn small" data-act="close-sheet">${ph.state === "review" ? "Cancel" : "Close"}</button></div>
+      <div class="scroll"><div class="thumbs">${ph.thumbs.map(u => `<img src="${u}" alt="Your photo">`).join("")}</div>${body}</div>
+    </div>`;
+  }
+
+  function closePhoto() {
+    if (photoCtl) photoCtl.abort();
+    if (S.photo) S.photo.thumbs.forEach(u => URL.revokeObjectURL(u));
+    S.photo = null;
+  }
+
   async function init() {
+    initSample();
     render();
     try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch { db = null; }
     if (!db) {
@@ -773,6 +960,11 @@
           </div>
           ${todays.map(t => `<button class="btn wide" data-act="open:${t.id}">Continue ${esc(sessTitle(t))}</button>`).join("")}
         </section>
+        ${imgLimits ? `<section class="card photo-card">
+          <h2 class="h2">Log from a photo</h2>
+          <p class="muted" style="font-size:13.5px">Snap your whiteboard, notebook, or a watch or app screenshot. Claude reads it and fills in the session for you to check.</p>
+          <div class="row"><button class="btn primary" data-act="photo-pick">Take or choose a photo</button></div>
+        </section>` : ""}
         <section class="card">
           <div class="row between"><h2 class="h2">Today's note</h2><button class="btn small" data-act="journal-today">${hasDay(S.days[today()]) ? "Edit" : "Add note"}</button></div>
           ${hasDay(S.days[today()])
@@ -1207,6 +1399,7 @@
 
   function renderSheet() {
     const el = document.getElementById("sheet");
+    if (S.sheet === "photo" && S.photo) { el.hidden = false; el.innerHTML = photoSheet(); return; }
     const fs = S.sheet === "finish" ? cur() : null;
     if (!S.sheet || (S.sheet === "finish" && !fs)) { el.hidden = true; el.innerHTML = ""; return; }
     el.hidden = false;
@@ -1276,7 +1469,7 @@
 
   document.addEventListener("click", e => {
     const el = e.target.closest("[data-act]");
-    if (!el) { if (e.target.id === "sheet") { S.sheet = false; renderSheet(); } return; }
+    if (!el) { if (e.target.id === "sheet") { if (S.sheet === "photo") closePhoto(); S.sheet = false; renderSheet(); } return; }
     const [act, a, b] = el.dataset.act.split(":");
     const s = cur();
     switch (act) {
@@ -1324,7 +1517,22 @@
         if (!s || !confirmTap(el, "del")) break;
         delete S.sessions[s.id]; saveSession(s.id, 0); setCurrent(null); render(); toast("Workout deleted"); break;
       case "add-ex": S.sheet = true; S.pq = ""; S.pg = "All"; renderSheet(); setTimeout(() => document.getElementById("pq")?.focus({ preventScroll: true }), 30); break;
-      case "close-sheet": S.sheet = false; renderSheet(); break;
+      case "close-sheet": if (S.sheet === "photo") closePhoto(); S.sheet = false; renderSheet(); break;
+      case "photo-pick": { const inp = document.getElementById("photo-in"); inp.value = ""; inp.click(); break; }
+      case "photo-stop": closePhoto(); S.sheet = false; renderSheet(); break;
+      case "photo-add": {
+        const ph = S.photo; if (!ph) break;
+        const kept = ph.sessions.filter((_, i) => ph.keep[i]);
+        if (!kept.length) { toast("Tick at least one session to add."); break; }
+        const used = new Set(kept.flatMap(x => (x.items || []).map(it => it.ex)));
+        for (const c of Object.values(ph.customs)) if (used.has(c.id)) { S.custom[c.id] = c; saveCustom(c.id); }
+        for (const x of kept) { delete x._wu; S.sessions[x.id] = x; saveSession(x.id, 0); }
+        LS.set("hasData", true);
+        closePhoto(); S.sheet = false;
+        toast(`Added ${kept.length} session${kept.length > 1 ? "s" : ""} from your photo`);
+        if (kept.length === 1) { setCurrent(kept[0].id); setTab("log"); } else setTab("history");
+        break;
+      }
       case "pg": S.pg = a; renderSheet(); break;
       case "pick": {
         if (!s) break;
@@ -1437,8 +1645,18 @@
       saveSession(s.id);
     }
   });
-  document.addEventListener("change", e => { if (e.target.id === "cx-bw") S.cx.bw = e.target.checked; });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && S.sheet) { S.sheet = false; renderSheet(); } });
+  document.addEventListener("change", e => {
+    const t = e.target;
+    if (t.id === "cx-bw") S.cx.bw = t.checked;
+    if (t.id === "photo-in") readPhoto([...t.files]);
+    const m = t.id.match(/^imp-(\d+)$/);
+    if (m && S.photo) {
+      S.photo.keep[+m[1]] = t.checked;
+      const btn = document.querySelector('[data-act="photo-add"]');
+      if (btn) btn.textContent = `Add ${S.photo.keep.filter(Boolean).length} to log`;
+    }
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && S.sheet) { if (S.sheet === "photo") closePhoto(); S.sheet = false; renderSheet(); } });
 
   init();
 })();
